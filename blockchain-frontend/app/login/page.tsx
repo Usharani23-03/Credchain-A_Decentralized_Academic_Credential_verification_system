@@ -25,11 +25,32 @@ export default function LoginPage() {
         email,
         password,
       });
-
+      console.log(data);
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
-      router.push("/dashboard");
+      const role = data.user.role;
+
+      switch (role) {
+        case "STUDENT":
+          router.push("/student/dashboard");
+          break;
+
+        case "UNIVERSITY":
+          router.push("/university/dashboard");
+          break;
+
+        case "EMPLOYER":
+          router.push("/employer/dashboard");
+          break;
+
+        case "ADMIN":
+          router.push("/admin/dashboard");
+          break;
+
+        default:
+          router.push("/");
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || "Login failed");
     } finally {

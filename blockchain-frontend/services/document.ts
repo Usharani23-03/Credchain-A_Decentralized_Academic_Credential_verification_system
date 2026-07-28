@@ -22,3 +22,10 @@ export const downloadDocument = async (id: number) => {
 
   return response;
 };
+
+// ================= Employer Verification History =================
+
+export const getVerificationHistory = async () => {
+  const response = await api.get("/documents/verification-history");
+  return response.data;
+};
