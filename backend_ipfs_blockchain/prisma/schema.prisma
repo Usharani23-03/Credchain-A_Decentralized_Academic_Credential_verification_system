@@ -8,31 +8,50 @@ datasource db {
 }
 
 model User {
-  id        Int        @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   name      String
-  email     String     @unique
+  email     String   @unique
   password  String
-  role      Role       @default(STUDENT)
-  createdAt DateTime   @default(now())
-  documents Document[]
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+
+  documents           Document[]            @relation("UserDocuments")
+  verificationHistory VerificationHistory[] @relation("EmployerVerifications")
 }
 
 model Document {
-  id                 Int                @id @default(autoincrement())
+  id                 Int                  @id @default(autoincrement())
   title              String
   description        String?
   certificateType    String
   fileName           String
-  fileHash           String             @unique
+  fileHash           String               @unique
   issuedBy           String
   issueDate          DateTime
-  verificationStatus VerificationStatus @default(PENDING)
+  verificationStatus VerificationStatus   @default(PENDING)
   blockchainTxId     String?
   ipfsHash           String?
-  sha512Hash         String?            @unique
-  uploadedAt         DateTime           @default(now())
-  userId             Int
-  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sha512Hash         String?              @unique
+  uploadedAt         DateTime             @default(now())
+
+  userId Int
+  user   User @relation("UserDocuments", fields: [userId], references: [id], onDelete: Cascade)
+
+  verificationHistory VerificationHistory[]
+}
+
+model VerificationHistory {
+  id Int @id @default(autoincrement())
+
+  documentId Int
+  employerId Int
+
+  status VerificationStatus
+
+  verifiedAt DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  employer User @relation("EmployerVerifications", fields: [employerId], references: [id], onDelete: Cascade)
 }
 
 enum Role {

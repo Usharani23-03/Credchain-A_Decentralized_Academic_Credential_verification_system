@@ -12,7 +12,8 @@ const {
     getDocumentById,
     deleteDocument,
     downloadDocument,
-    verifyDocument
+    verifyDocument,
+    getVerificationHistory
 } = require("../controllers/documentController");
 
 
@@ -21,7 +22,7 @@ const {
 router.post(
     "/upload",
     authenticateUser,
-    authorizeRoles("STUDENT", "UNIVERSITY", "ADMIN"),
+    authorizeRoles("UNIVERSITY"),
     upload.single("certificate"),
     uploadDocument
 );
@@ -29,6 +30,8 @@ router.post(
 // Verify Certificate
 router.post(
     "/verify",
+    authenticateUser,
+    authorizeRoles("EMPLOYER"),
     upload.single("certificate"),
     verifyDocument
 );
@@ -40,6 +43,13 @@ router.get(
     getMyDocuments
 );
 
+// Verification History
+router.get(
+    "/verification-history",
+    authenticateUser,
+    authorizeRoles("EMPLOYER"),
+    getVerificationHistory
+);
 
 // Get Document By ID
 router.get(

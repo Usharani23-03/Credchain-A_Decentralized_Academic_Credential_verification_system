@@ -9,7 +9,8 @@ console.log("Document routes loaded:", documentRoutes);
 const verificationRoutes = require("./routes/verificationRoutes");
 const ipfsRoutes = require("./routes/ipfsRoutes");
 const certificateRoutes = require("./routes/certificateRoutes");
-
+const dashboardRoutes = require("./routes/dashboardRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 const app = express();
 
 const PORT = process.env.PORT || 3005;
@@ -32,7 +33,9 @@ app.use("/documents", documentRoutes);
 app.use("/verify", verificationRoutes);
 app.use("/ipfs", ipfsRoutes);
 app.use("/certificates", certificateRoutes);
-
+app.use("/dashboard", dashboardRoutes);
+app.use("/admin", adminRoutes);
+console.log("✅ Admin routes registered");
 // 404 handler
 app.use((req, res) => {
     res.status(404).json({
