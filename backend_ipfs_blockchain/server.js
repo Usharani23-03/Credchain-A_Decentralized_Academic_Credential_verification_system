@@ -13,7 +13,7 @@ const dashboardRoutes = require("./routes/dashboardRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const app = express();
 
-const PORT = process.env.PORT || 3005;
+const PORT = process.env.PORT || 5555;
 
 // Middleware
 app.use(cors());
