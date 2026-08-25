@@ -1,174 +1,761 @@
 const prisma = require("../config/prisma");
-const generateFileHash = require("../utils/hashGenerator");
-const { storeHashOnBlockchain } = require("../services/blockchainService");
+
+const {
+    storeHashOnBlockchain,
+    verifyHashOnBlockchain
+} = require("../services/blockchainService");
+
 const uploadToPinata = require("../services/pinataService");
+
 const generateSHA512 = require("../utils/hashGenerator");
+const generateVerificationQR = require("../utils/qrGenerator");
+
 const fs = require("fs");
 const path = require("path");
 
+const { PDFDocument } = require("pdf-lib");
 
-// ================= Upload Document =================
+
+// ============================================================
+// Helper: Create Certificate PDF with BlockVerify QR
+// ============================================================
+
+const createCertificateWithQR = async (
+    originalPdfPath,
+    outputPdfPath,
+    qrDataURL,
+    certificateId
+) => {
+
+    const existingPdfBytes =
+        fs.readFileSync(originalPdfPath);
+
+    const pdfDoc =
+        await PDFDocument.load(existingPdfBytes);
+
+    const pages =
+        pdfDoc.getPages();
+
+    if (!pages.length) {
+        throw new Error("Certificate PDF has no pages.");
+    }
+
+    // Add QR to the last page
+    const page =
+        pages[pages.length - 1];
+
+    const { width, height } =
+        page.getSize();
+
+    // Convert QR data URL to PNG bytes
+    const base64Data =
+        qrDataURL.replace(
+            /^data:image\/png;base64,/,
+            ""
+        );
+
+    const qrBytes =
+        Buffer.from(base64Data, "base64");
+
+    const qrImage =
+        await pdfDoc.embedPng(qrBytes);
+
+    // QR size
+    const qrSize = 100;
+
+    // Position
+    const margin = 40;
+
+    let qrX = margin;
+    let qrY = margin + 30;
+
+    // Prevent QR from going outside page
+    if (qrY + qrSize + 40 > height) {
+        qrY = 40;
+    }
+
+    if (qrX + qrSize > width) {
+        qrX = width - qrSize - margin;
+    }
+
+    // Draw QR
+    page.drawImage(qrImage, {
+        x: qrX,
+        y: qrY,
+        width: qrSize,
+        height: qrSize
+    });
+
+    // Certificate ID
+    page.drawText(
+        `Certificate ID: ${certificateId}`,
+        {
+            x: qrX,
+            y: qrY - 15,
+            size: 7
+        }
+    );
+
+    // Verification text
+    page.drawText(
+        "Scan QR to verify",
+        {
+            x: qrX,
+            y: qrY + qrSize + 5,
+            size: 8
+        }
+    );
+
+    const finalPdfBytes =
+        await pdfDoc.save();
+
+    fs.writeFileSync(
+        outputPdfPath,
+        finalPdfBytes
+    );
+};
+
+
+// ============================================================
+// Upload / Issue Document
+// ============================================================
 
 exports.uploadDocument = async (req, res) => {
 
+    let originalFilePath = null;
+    let finalFilePath = null;
+
     try {
 
+        // --------------------------------------------------------
+        // 1. Check uploaded file
+        // --------------------------------------------------------
+
         if (!req.file) {
+
             return res.status(400).json({
                 message: "Please upload a PDF file."
             });
+
         }
 
+        originalFilePath =
+            req.file.path;
+
+
+        // --------------------------------------------------------
+        // 2. Validate PDF
+        // --------------------------------------------------------
+
+        if (
+            req.file.mimetype !== "application/pdf"
+        ) {
+
+            if (
+                fs.existsSync(
+                    originalFilePath
+                )
+            ) {
+                fs.unlinkSync(
+                    originalFilePath
+                );
+            }
+
+            return res.status(400).json({
+                message:
+                    "Only PDF certificates are allowed."
+            });
+
+        }
+
+
+        // --------------------------------------------------------
+        // 3. Get request information
+        // --------------------------------------------------------
 
         let {
             title,
             description,
             certificateType,
             issuedBy,
-            issueDate
+            issueDate,
+            hasExistingQR
         } = req.body;
 
 
-        if (!title || !certificateType || !issuedBy || !issueDate) {
+        // --------------------------------------------------------
+        // 4. Validate required fields
+        // --------------------------------------------------------
 
-            fs.unlinkSync(req.file.path);
+        if (
+            !title ||
+            !certificateType ||
+            !issuedBy ||
+            !issueDate
+        ) {
+
+            if (
+                fs.existsSync(
+                    originalFilePath
+                )
+            ) {
+                fs.unlinkSync(
+                    originalFilePath
+                );
+            }
 
             return res.status(400).json({
-                message: "All required fields must be provided."
+                message:
+                    "All required fields must be provided."
             });
 
         }
 
 
-        title = title.trim();
-        description = description ? description.trim() : null;
-        certificateType = certificateType.trim();
-        issuedBy = issuedBy.trim();
+        // --------------------------------------------------------
+        // 5. Clean input
+        // --------------------------------------------------------
+
+        title =
+            title.trim();
+
+        description =
+            description
+                ? description.trim()
+                : null;
+
+        certificateType =
+            certificateType.trim();
+
+        issuedBy =
+            issuedBy.trim();
 
 
-        const fileHash = generateFileHash(req.file.path);
-        const sha512Hash = generateSHA512(req.file.path);
+        // --------------------------------------------------------
+        // 6. Determine QR mode
+        // --------------------------------------------------------
+
+        const preserveExistingQR =
+            hasExistingQR === "true" ||
+            hasExistingQR === true;
 
 
-        const existingDocument = await prisma.document.findUnique({
+        console.log("");
+        console.log("=================================");
+        console.log("CERTIFICATE UPLOAD");
+        console.log("=================================");
+        console.log(
+            "Existing QR:",
+            preserveExistingQR
+        );
+        console.log(
+            "Certificate:",
+            req.file.originalname
+        );
+        console.log("=================================");
 
-            where: {
-                fileHash
-            }
 
-        });
+        // --------------------------------------------------------
+        // 7. Generate Certificate ID
+        // --------------------------------------------------------
 
+        const certificateId =
+            `CERT-${Date.now()}`;
+
+
+        console.log("");
+        console.log(
+            "Certificate ID:",
+            certificateId
+        );
+
+
+        // --------------------------------------------------------
+        // 8. Decide final certificate
+        // --------------------------------------------------------
+
+        let verificationURL = null;
+        let qrGenerated = false;
+
+        let finalFileName =
+            req.file.originalname;
+
+        finalFilePath =
+            path.join(
+                path.dirname(originalFilePath),
+                finalFileName
+            );
+
+
+        if (preserveExistingQR) {
+
+            // ====================================================
+            // EXISTING QR
+            // ====================================================
+
+            console.log("");
+            console.log(
+                "Existing QR selected."
+            );
+
+            console.log(
+                "Original certificate will be preserved."
+            );
+
+
+            /*
+             * Do NOT modify the certificate.
+             *
+             * This is important for certificates such as
+             * your Cloud Computing certificate which already
+             * contains a QR code.
+             */
+
+            finalFilePath =
+                originalFilePath;
+
+            finalFileName =
+                req.file.originalname;
+
+        } else {
+
+            // ====================================================
+            // GENERATE BLOCKVERIFY QR
+            // ====================================================
+
+            console.log("");
+            console.log(
+                "Generating BlockVerify QR..."
+            );
+
+
+            const qr =
+                await generateVerificationQR(
+                    certificateId
+                );
+
+
+            verificationURL =
+                qr.verificationURL;
+
+
+            qrGenerated = true;
+
+
+            finalFileName =
+                `certificate-${certificateId}.pdf`;
+
+
+            finalFilePath =
+                path.join(
+                    path.dirname(originalFilePath),
+                    finalFileName
+                );
+
+
+            await createCertificateWithQR(
+                originalFilePath,
+                finalFilePath,
+                qr.qrDataURL,
+                certificateId
+            );
+
+
+            console.log(
+                "BlockVerify QR added to certificate."
+            );
+
+        }
+
+
+        // --------------------------------------------------------
+        // 9. Generate SHA-512
+        // --------------------------------------------------------
+
+        /*
+         * IMPORTANT:
+         *
+         * The hash is generated from the FINAL certificate.
+         *
+         * Existing QR:
+         *     original certificate → hash
+         *
+         * New BlockVerify QR:
+         *     modified certificate → hash
+         */
+
+        const sha512Hash =
+            generateSHA512(
+                finalFilePath
+            );
+
+
+        const fileHash =
+            sha512Hash;
+
+
+        console.log("");
+        console.log("=================================");
+        console.log("FINAL CERTIFICATE HASH");
+        console.log("=================================");
+        console.log(
+            "SHA-512:",
+            sha512Hash
+        );
+        console.log(
+            "Length:",
+            sha512Hash.length
+        );
+        console.log("=================================");
+
+
+        // --------------------------------------------------------
+        // 10. Check duplicate certificate
+        // --------------------------------------------------------
+
+        const existingDocument =
+            await prisma.document.findUnique({
+
+                where: {
+                    fileHash
+                }
+
+            });
 
 
         if (existingDocument) {
 
-            fs.unlinkSync(req.file.path);
+            if (
+                fs.existsSync(
+                    originalFilePath
+                )
+            ) {
+
+                fs.unlinkSync(
+                    originalFilePath
+                );
+
+            }
+
+            /*
+             * If finalFilePath is different from original,
+             * delete it too.
+             */
+
+            if (
+                finalFilePath !== originalFilePath &&
+                fs.existsSync(
+                    finalFilePath
+                )
+            ) {
+
+                fs.unlinkSync(
+                    finalFilePath
+                );
+
+            }
 
             return res.status(409).json({
-                message: "Certificate already exists."
+                message:
+                    "Certificate already exists."
             });
 
         }
 
 
+        // --------------------------------------------------------
+        // 11. Upload FINAL certificate to IPFS
+        // --------------------------------------------------------
 
-        // Upload to IPFS
-        const ipfsResult = await uploadToPinata(
-            req.file.path,
-            req.file.originalname
-        );
-        console.log("IPFS Result:", ipfsResult);
-
-        // Store hash on blockchain
-        const blockchain = await storeHashOnBlockchain(sha512Hash);
-
+        const ipfsResult =
+            await uploadToPinata(
+                finalFilePath,
+                finalFileName
+            );
 
 
+        console.log("");
         console.log("=================================");
-        console.log("Blockchain Response:");
+        console.log("IPFS RESULT");
+        console.log("=================================");
+        console.log(ipfsResult);
+        console.log("=================================");
+
+
+        if (
+            !ipfsResult ||
+            !ipfsResult.IpfsHash
+        ) {
+
+            throw new Error(
+                "IPFS upload failed."
+            );
+
+        }
+
+
+        // --------------------------------------------------------
+        // 12. Store certificate on Hyperledger Fabric
+        // --------------------------------------------------------
+
+        /*
+         * IMPORTANT:
+         *
+         * registerNo is kept as the certificate ID for now
+         * because your current CreateCertificate chaincode
+         * expects:
+         *
+         * CreateCertificate(
+         *   certificateId,
+         *   studentName,
+         *   registerNo,
+         *   degree,
+         *   issuer,
+         *   fileHash,
+         *   ipfsCID
+         * )
+         *
+         * We will improve this mapping later if needed.
+         */
+
+        const blockchain =
+            await storeHashOnBlockchain(
+
+                sha512Hash,
+
+                certificateId,
+
+                title,
+
+                certificateId,
+
+                certificateType,
+
+                issuedBy,
+
+                ipfsResult.IpfsHash
+
+            );
+
+
+        console.log("");
+        console.log("=================================");
+        console.log("BLOCKCHAIN RESPONSE");
+        console.log("=================================");
         console.log(blockchain);
         console.log("=================================");
 
 
+        // --------------------------------------------------------
+        // 13. Check blockchain result
+        // --------------------------------------------------------
 
         if (!blockchain.success) {
 
-            if (fs.existsSync(req.file.path)) {
-                fs.unlinkSync(req.file.path);
+            /*
+             * Don't leave files behind if Fabric fails.
+             */
+
+            if (
+                finalFilePath !== originalFilePath &&
+                fs.existsSync(
+                    finalFilePath
+                )
+            ) {
+
+                fs.unlinkSync(
+                    finalFilePath
+                );
+
             }
 
+            if (
+                originalFilePath &&
+                fs.existsSync(
+                    originalFilePath
+                )
+            ) {
+
+                fs.unlinkSync(
+                    originalFilePath
+                );
+
+            }
 
             return res.status(500).json({
 
-                message: "Failed to store certificate on blockchain.",
-                error: blockchain.error
+                message:
+                    "Failed to store certificate on blockchain.",
+
+                error:
+                    blockchain.error
 
             });
 
         }
 
 
+        // --------------------------------------------------------
+        // 14. Store certificate in PostgreSQL
+        // --------------------------------------------------------
 
-        const document = await prisma.document.create({
+        const document =
+            await prisma.document.create({
 
-            data: {
+                data: {
 
-                title,
+                    title,
 
-                description,
+                    description,
 
-                certificateType,
+                    certificateType,
+
+                    fileName:
+                        finalFileName,
+
+                    fileHash,
+
+                    /*
+                     * Certificate ID is now stored separately.
+                     */
+
+                    certificateId,
+
+                    /*
+                     * Verification URL is stored only when
+                     * BlockVerify generated the QR.
+                     *
+                     * For an existing QR certificate,
+                     * it remains null because we do not know
+                     * what URL the old QR contains.
+                     */
+
+                    verificationUrl:
+                        verificationURL,
+
+                    issuedBy,
+
+                    issueDate:
+                        new Date(issueDate),
+
+                    /*
+                     * Keep this field for compatibility
+                     * with your existing database.
+                     *
+                     * It contains the certificate ID for now.
+                     */
+
+                    blockchainTxId:
+                        certificateId,
+
+                    ipfsHash:
+                        ipfsResult.IpfsHash,
+
+                    sha512Hash,
+
+                    userId:
+                        req.user.id
+
+                }
+
+            });
 
 
-                fileName: req.file.filename,
+        // --------------------------------------------------------
+        // 15. Delete temporary original file
+        // --------------------------------------------------------
 
-                fileHash,
+        /*
+         * If we generated a new PDF:
+         *
+         * original PDF = temporary
+         * final PDF = actual certificate
+         */
+
+        if (
+            finalFilePath !== originalFilePath &&
+            originalFilePath &&
+            fs.existsSync(
+                originalFilePath
+            )
+        ) {
+
+            fs.unlinkSync(
+                originalFilePath
+            );
+
+        }
 
 
-                issuedBy,
-
-                issueDate: new Date(issueDate),
-
-
-                blockchainTxId: blockchain.transactionId,
-                ipfsHash: ipfsResult.IpfsHash,
-
-                sha512Hash,
-
-                userId: req.user.id
-
-            }
-
-        });
-
-
+        // --------------------------------------------------------
+        // 16. Response
+        // --------------------------------------------------------
 
         return res.status(201).json({
 
-            message: "Certificate uploaded successfully.",
+            message:
+                "Certificate uploaded and issued successfully.",
+
+            certificateId,
+
+            verificationURL,
+
+            qrGenerated,
+
+            existingQRPreserved:
+                preserveExistingQR,
 
             document
 
         });
 
 
-
     } catch (error) {
 
+        console.error("");
+        console.error("=================================");
+        console.error("CERTIFICATE UPLOAD ERROR");
+        console.error("=================================");
+        console.error(error);
+        console.error("=================================");
 
-        if (req.file && fs.existsSync(req.file.path)) {
 
-            fs.unlinkSync(req.file.path);
+        if (
+            originalFilePath &&
+            fs.existsSync(
+                originalFilePath
+            )
+        ) {
+
+            fs.unlinkSync(
+                originalFilePath
+            );
 
         }
 
 
-        console.error(error);
+        if (
+            finalFilePath &&
+            finalFilePath !== originalFilePath &&
+            fs.existsSync(
+                finalFilePath
+            )
+        ) {
+
+            fs.unlinkSync(
+                finalFilePath
+            );
+
+        }
 
 
         return res.status(500).json({
 
-            message: "Internal Server Error"
+            message:
+                "Internal Server Error",
+
+            error:
+                error.message
 
         });
 
@@ -177,54 +764,40 @@ exports.uploadDocument = async (req, res) => {
 };
 
 
-
-
-
-// ================= My Documents =================
+// ============================================================
+// Get My Documents
+// ============================================================
 
 exports.getMyDocuments = async (req, res) => {
 
     try {
 
+        const documents =
+            await prisma.document.findMany({
 
-        const documents = await prisma.document.findMany({
+                where: {
+                    userId: req.user.id
+                },
 
-            where: {
+                orderBy: {
+                    uploadedAt: "desc"
+                }
 
-                userId: req.user.id
-
-            },
-
-
-            orderBy: {
-
-                uploadedAt: "desc"
-
-            }
-
-
-        });
-
+            });
 
 
         return res.status(200).json({
-
             documents
-
         });
-
 
 
     } catch (error) {
 
-
         console.error(error);
 
-
         return res.status(500).json({
-
-            message: "Internal Server Error"
-
+            message:
+                "Internal Server Error"
         });
 
     }
@@ -232,91 +805,73 @@ exports.getMyDocuments = async (req, res) => {
 };
 
 
-
-
-
-
-// ================= Get Document By ID =================
+// ============================================================
+// Get Document By ID
+// ============================================================
 
 exports.getDocumentById = async (req, res) => {
 
-
     try {
 
-
-        const id = Number(req.params.id);
+        const id =
+            Number(req.params.id);
 
 
         if (isNaN(id)) {
 
             return res.status(400).json({
-
-                message: "Invalid document ID."
-
+                message:
+                    "Invalid document ID."
             });
 
         }
 
 
+        const document =
+            await prisma.document.findUnique({
 
-        const document = await prisma.document.findUnique({
+                where: {
+                    id
+                }
 
-            where: {
-
-                id
-
-            }
-
-        });
-
+            });
 
 
         if (!document) {
 
             return res.status(404).json({
-
-                message: "Document not found."
-
+                message:
+                    "Document not found."
             });
 
         }
-
 
 
         if (
-
             req.user.role !== "ADMIN" &&
-
             document.userId !== req.user.id
-
         ) {
 
-
             return res.status(403).json({
-
-                message: "Access denied."
-
+                message:
+                    "Access denied."
             });
-
 
         }
 
 
+        return res.status(200).json(
+            document
+        );
 
-        return res.status(200).json(document);
 
-
-
-    } catch(error) {
-
+    } catch (error) {
 
         console.error(error);
 
-
         return res.status(500).json({
-
-            message:"Internal Server Error"
-
+            message:
+                "Internal Server Error"
         });
 
     }
@@ -324,114 +879,94 @@ exports.getDocumentById = async (req, res) => {
 };
 
 
+// ============================================================
+// Delete Document
+// ============================================================
+
+exports.deleteDocument = async (req, res) => {
+
+    try {
+
+        const id =
+            Number(req.params.id);
 
 
+        const document =
+            await prisma.document.findUnique({
+
+                where: {
+                    id
+                }
+
+            });
 
 
-
-// ================= Delete Document =================
-
-exports.deleteDocument = async (req,res)=>{
-
-
-    try{
-
-
-        const id = Number(req.params.id);
-
-
-        const document = await prisma.document.findUnique({
-
-            where:{
-                id
-            }
-
-        });
-
-
-
-        if(!document){
+        if (!document) {
 
             return res.status(404).json({
-
-                message:"Document not found."
-
+                message:
+                    "Document not found."
             });
 
         }
 
 
-
-        if(
-
+        if (
             req.user.role !== "ADMIN" &&
-
             document.userId !== req.user.id
-
-        ){
+        ) {
 
             return res.status(403).json({
-
-                message:"Access denied."
-
+                message:
+                    "Access denied."
             });
 
         }
 
 
-
-        const filePath = path.join(
-
-            __dirname,
-
-            "..",
-
-            "uploads",
-
-            document.fileName
-
-        );
+        const filePath =
+            path.join(
+                __dirname,
+                "..",
+                "uploads",
+                document.fileName
+            );
 
 
-
-        if(fs.existsSync(filePath)){
+        if (
+            fs.existsSync(filePath)
+        ) {
 
             fs.unlinkSync(filePath);
 
         }
 
 
-
-
         await prisma.document.delete({
 
-            where:{
-
+            where: {
                 id
-
             }
 
         });
-
 
 
         return res.status(200).json({
 
-            message:"Document deleted successfully."
+            message:
+                "Document deleted successfully."
 
         });
 
 
-
-    }catch(error){
-
+    } catch (error) {
 
         console.error(error);
 
-
         return res.status(500).json({
 
-            message:"Internal Server Error"
+            message:
+                "Internal Server Error"
 
         });
 
@@ -440,84 +975,72 @@ exports.deleteDocument = async (req,res)=>{
 };
 
 
+// ============================================================
+// Download Document
+// ============================================================
+
+exports.downloadDocument = async (req, res) => {
+
+    try {
+
+        const id =
+            Number(req.params.id);
 
 
+        const document =
+            await prisma.document.findUnique({
+
+                where: {
+                    id
+                }
+
+            });
 
 
-// ================= Download Document =================
-
-exports.downloadDocument = async(req,res)=>{
-
-
-    try{
-
-
-        const id = Number(req.params.id);
-
-
-
-        const document = await prisma.document.findUnique({
-
-            where:{
-                id
-            }
-
-        });
-
-
-
-        if(!document){
+        if (!document) {
 
             return res.status(404).json({
-
-                message:"Document not found."
-
+                message:
+                    "Document not found."
             });
 
         }
 
 
+        const filePath =
+            path.join(
+                __dirname,
+                "..",
+                "uploads",
+                document.fileName
+            );
 
-        const filePath = path.join(
 
-            __dirname,
+        if (
+            !fs.existsSync(filePath)
+        ) {
 
-            "..",
+            return res.status(404).json({
+                message:
+                    "File not found."
+            });
 
-            "uploads",
+        }
 
+
+        return res.download(
+            filePath,
             document.fileName
-
         );
 
 
-
-        if(!fs.existsSync(filePath)){
-
-            return res.status(404).json({
-
-                message:"File not found."
-
-            });
-
-        }
-
-
-
-        return res.download(filePath);
-
-
-
-    }catch(error){
-
+    } catch (error) {
 
         console.error(error);
 
-
         return res.status(500).json({
-
-            message:"Internal Server Error"
-
+            message:
+                "Internal Server Error"
         });
 
     }
@@ -525,228 +1048,347 @@ exports.downloadDocument = async(req,res)=>{
 };
 
 
+// ============================================================
+// Verify Document
+// ============================================================
 
+exports.verifyDocument = async (req, res) => {
 
+    try {
 
-
-
-// ================= Verify Document =================
-
-exports.verifyDocument = async(req,res)=>{
-
-
-    try{
-
-
-        if(!req.file){
+        if (!req.file) {
 
             return res.status(400).json({
 
-                verified:false,
+                verified: false,
 
-                message:"Please upload a certificate."
+                blockchainVerified: false,
+
+                message:
+                    "Please upload a certificate."
 
             });
 
         }
 
 
+        const uploadedFilePath =
+            req.file.path;
 
-        const fileHash = generateFileHash(req.file.path);
+
+        console.log("");
+        console.log("=================================");
+        console.log("CERTIFICATE VERIFICATION");
+        console.log("=================================");
+        console.log(
+            "Uploaded file:",
+            req.file.originalname
+        );
 
 
+        // --------------------------------------------------------
+        // Generate SHA-512
+        // --------------------------------------------------------
 
-        if(fs.existsSync(req.file.path)){
+        const sha512Hash =
+            generateSHA512(
+                uploadedFilePath
+            );
 
-            fs.unlinkSync(req.file.path);
+
+        console.log(
+            "Uploaded SHA-512:",
+            sha512Hash
+        );
+
+
+        // --------------------------------------------------------
+        // Find certificate by SHA-512
+        // --------------------------------------------------------
+
+        const document =
+            await prisma.document.findFirst({
+
+                where: {
+                    sha512Hash
+                }
+
+            });
+
+
+        // Delete temporary file
+        if (
+            fs.existsSync(
+                uploadedFilePath
+            )
+        ) {
+
+            fs.unlinkSync(
+                uploadedFilePath
+            );
 
         }
 
 
-
-
-        const document = await prisma.document.findUnique({
-
-            where:{
-
-                fileHash
-
-            }
-
-        });
-
-
-
-
-
-        if(!document){
-
+        if (!document) {
 
             return res.status(404).json({
 
-                verified:false,
+                verified: false,
 
-                message:"Certificate not found."
+                blockchainVerified: false,
+
+                message:
+                    "Certificate not found or certificate has been modified."
 
             });
-
 
         }
 
 
+        // --------------------------------------------------------
+        // Verify with Hyperledger Fabric
+        // --------------------------------------------------------
+
+        const blockchain =
+            await verifyHashOnBlockchain(
+
+                document.certificateId,
+
+                sha512Hash
+
+            );
 
 
+        if (!blockchain.exists) {
 
-        // ===============================
-        // UPDATE STATUS AFTER VERIFICATION
-        // ===============================
+            return res.status(404).json({
 
+                verified: false,
 
-        const updatedDocument = await prisma.document.update({
+                blockchainVerified: false,
 
-            where:{
+                message:
+                    "Certificate could not be verified on blockchain.",
 
-                id: document.id
+                certificateId:
+                    document.certificateId
 
-            },
+            });
 
-
-            data:{
-
-                verificationStatus:"VERIFIED"
-
-            }
+        }
 
 
-        });
-        // Save verification history (only if verified by an employer)
-        if (req.user && req.user.role === "EMPLOYER") {
+        // --------------------------------------------------------
+        // Update verification status
+        // --------------------------------------------------------
 
-            await prisma.verificationHistory.create({
+        const updatedDocument =
+            await prisma.document.update({
+
+                where: {
+                    id: document.id
+                },
 
                 data: {
 
-                    documentId: updatedDocument.id,
-
-                    employerId: req.user.id,
-
-                    status: "VERIFIED"
+                    verificationStatus:
+                        "VERIFIED"
 
                 }
 
             });
 
+
+        // --------------------------------------------------------
+        // Save employer verification history
+        // --------------------------------------------------------
+
+        if (
+            req.user &&
+            (
+                req.user.role === "EMPLOYER" ||
+                req.user.role === "STUDENT"
+            )
+        ) {
+
+            /*
+             * VerificationHistory currently uses employerId.
+             *
+             * We should NOT write student verification
+             * history into this table until the Prisma schema
+             * is redesigned for generic verifiers.
+             *
+             * Therefore only employers are recorded here.
+             */
+
+            if (
+                req.user.role === "EMPLOYER"
+            ) {
+
+                await prisma.verificationHistory.create({
+
+                    data: {
+
+                        documentId:
+                            updatedDocument.id,
+
+                        employerId:
+                            req.user.id,
+
+                        status:
+                            "VERIFIED"
+
+                    }
+
+                });
+
+            }
+
         }
 
 
-
-
+        // --------------------------------------------------------
+        // Successful verification
+        // --------------------------------------------------------
 
         return res.status(200).json({
 
+            verified: true,
 
-            verified:true,
+            blockchainVerified: true,
 
+            message:
+                "Certificate verified successfully.",
 
-            message:"Certificate verified successfully.",
+            certificateId:
+                document.certificateId,
 
+            verificationURL:
+                document.verificationUrl,
 
-            document:{
+            document: {
 
+                id:
+                    updatedDocument.id,
 
-                id:updatedDocument.id,
+                title:
+                    updatedDocument.title,
 
-                title:updatedDocument.title,
+                description:
+                    updatedDocument.description,
 
-                description:updatedDocument.description,
+                certificateType:
+                    updatedDocument.certificateType,
 
-                certificateType:updatedDocument.certificateType,
+                certificateId:
+                    updatedDocument.certificateId,
 
-                issuedBy:updatedDocument.issuedBy,
+                verificationUrl:
+                    updatedDocument.verificationUrl,
 
-                issueDate:updatedDocument.issueDate,
+                issuedBy:
+                    updatedDocument.issuedBy,
 
+                issueDate:
+                    updatedDocument.issueDate,
 
                 verificationStatus:
                     updatedDocument.verificationStatus,
 
-
                 blockchainTxId:
                     updatedDocument.blockchainTxId,
 
+                sha512Hash:
+                    updatedDocument.sha512Hash,
 
-                fileHash:
-                    updatedDocument.fileHash,
-
+                ipfsHash:
+                    updatedDocument.ipfsHash,
 
                 uploadedAt:
                     updatedDocument.uploadedAt
 
-
             }
-
-
 
         });
 
 
+    } catch (error) {
 
-    }catch(error){
+        console.error("");
+        console.error("=================================");
+        console.error("CERTIFICATE VERIFICATION ERROR");
+        console.error("=================================");
+        console.error(error);
+        console.error("=================================");
 
 
+        if (
+            req.file &&
+            fs.existsSync(
+                req.file.path
+            )
+        ) {
 
-        if(req.file && fs.existsSync(req.file.path)){
-
-            fs.unlinkSync(req.file.path);
+            fs.unlinkSync(
+                req.file.path
+            );
 
         }
 
 
-
-        console.error(error);
-
-
-
         return res.status(500).json({
 
-            verified:false,
+            verified: false,
 
-            message:"Internal Server Error"
+            blockchainVerified: false,
+
+            message:
+                "Internal Server Error",
+
+            error:
+                error.message
 
         });
-
 
     }
 
 };
 
-// ================= Employer Verification History =================
+
+// ============================================================
+// Employer Verification History
+// ============================================================
 
 exports.getVerificationHistory = async (req, res) => {
 
     try {
 
-        const history = await prisma.verificationHistory.findMany({
+        const history =
+            await prisma.verificationHistory.findMany({
 
-            where: {
+                where: {
 
-                employerId: req.user.id
+                    employerId:
+                        req.user.id
 
-            },
+                },
 
-            include: {
+                include: {
 
-                document: true
+                    document: true
 
-            },
+                },
 
-            orderBy: {
+                orderBy: {
 
-                verifiedAt: "desc"
+                    verifiedAt:
+                        "desc"
 
-            }
+                }
 
-        });
+            });
+
 
         return res.status(200).json({
 
@@ -754,13 +1396,15 @@ exports.getVerificationHistory = async (req, res) => {
 
         });
 
+
     } catch (error) {
 
         console.error(error);
 
         return res.status(500).json({
 
-            message: "Internal Server Error"
+            message:
+                "Internal Server Error"
 
         });
 

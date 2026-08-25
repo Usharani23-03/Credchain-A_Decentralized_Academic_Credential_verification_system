@@ -7,11 +7,12 @@ import {
   Calendar,
   Building2,
   BookOpen,
+  QrCode,
+  ShieldCheck,
 } from "lucide-react";
 
 import RoleGuard from "@/components/auth/RoleGuard";
 import { uploadCertificate } from "../../../services/upload";
-
 
 export default function UploadPage() {
 
@@ -27,8 +28,11 @@ export default function UploadPage() {
 
   const [description, setDescription] = useState("");
 
+  const [hasExistingQR, setHasExistingQR] = useState(false);
+
   const [loading, setLoading] = useState(false);
 
+  const [result, setResult] = useState<any>(null);
 
 
   const handleUpload = async () => {
@@ -38,53 +42,102 @@ export default function UploadPage() {
       return;
     }
 
+    if (file.type !== "application/pdf") {
+      alert("Please upload a PDF certificate.");
+      return;
+    }
 
     if (!title || !certificateType || !issuedBy || !issueDate) {
       alert("Please fill all required fields.");
       return;
     }
 
-
     try {
 
       setLoading(true);
-
+      setResult(null);
 
       const formData = new FormData();
 
       formData.append("certificate", file);
+
       formData.append("title", title);
-      formData.append("certificateType", certificateType);
-      formData.append("issuedBy", issuedBy);
-      formData.append("issueDate", issueDate);
-      formData.append("description", description);
+
+      formData.append(
+        "certificateType",
+        certificateType
+      );
+
+      formData.append(
+        "issuedBy",
+        issuedBy
+      );
+
+      formData.append(
+        "issueDate",
+        issueDate
+      );
+
+      formData.append(
+        "description",
+        description
+      );
+
+      /*
+       * Tell the backend whether the uploaded
+       * certificate already contains a QR code.
+       *
+       * true  = preserve existing QR
+       * false = BlockVerify should generate QR
+       */
+
+      formData.append(
+        "hasExistingQR",
+        hasExistingQR ? "true" : "false"
+      );
 
 
-
-      const response = await uploadCertificate(formData);
-
-
-      alert(response.message);
+      const response =
+        await uploadCertificate(formData);
 
 
+      setResult(response);
+
+
+      alert(
+        response.message ||
+        "Certificate issued successfully."
+      );
+
+
+      // Reset form
 
       setFile(null);
+
       setTitle("");
+
       setCertificateType("Degree");
+
       setIssuedBy("");
+
       setIssueDate("");
+
       setDescription("");
+
+      setHasExistingQR(false);
 
 
     } catch (error: any) {
 
-      console.error(error);
+      console.error(
+        "Certificate upload error:",
+        error
+      );
 
       alert(
         error?.response?.data?.message ||
         "Upload failed."
       );
-
 
     } finally {
 
@@ -95,13 +148,11 @@ export default function UploadPage() {
   };
 
 
-
   return (
 
     <RoleGuard allowedRole="UNIVERSITY">
 
       <main className="min-h-screen bg-[#020617] text-white p-10">
-
 
         <div className="mb-10">
 
@@ -109,18 +160,20 @@ export default function UploadPage() {
             Issue Certificate
           </h1>
 
-
           <p className="text-slate-400 mt-2">
-            Issue academic certificates securely using Blockchain.
+            Issue academic certificates securely using
+            Blockchain and BlockVerify.
           </p>
 
         </div>
 
 
-
         <div className="bg-[#0F172A] rounded-3xl border border-slate-800 p-10">
 
 
+          {/* ================================================= */}
+          {/* Certificate Upload */}
+          {/* ================================================= */}
 
           <label
             htmlFor="certificate"
@@ -132,23 +185,21 @@ export default function UploadPage() {
               className="text-cyan-400"
             />
 
-
             <h2 className="mt-5 text-2xl font-semibold">
               Upload Certificate File
             </h2>
 
-
             <p className="text-slate-400 mt-2">
-              Click to browse PDF or image file
+              Upload a PDF certificate
             </p>
-
-
 
             {file && (
 
               <div className="mt-5 flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-xl">
 
-                <FileText className="text-cyan-400" />
+                <FileText
+                  className="text-cyan-400"
+                />
 
                 <span>
                   {file.name}
@@ -158,31 +209,197 @@ export default function UploadPage() {
 
             )}
 
-
           </label>
-
 
 
           <input
             id="certificate"
             type="file"
             hidden
-            accept=".pdf,.png,.jpg,.jpeg"
-            onChange={(e)=>{
+            accept=".pdf,application/pdf"
+            onChange={(e) => {
 
-              if(e.target.files?.length){
-                setFile(e.target.files[0]);
+              const selectedFile =
+                e.target.files?.[0];
+
+              if (!selectedFile) {
+                return;
               }
+
+              if (
+                selectedFile.type !==
+                "application/pdf"
+              ) {
+
+                alert(
+                  "Please select a PDF certificate."
+                );
+
+                e.target.value = "";
+
+                return;
+              }
+
+              setFile(selectedFile);
 
             }}
           />
 
 
+          {/* ================================================= */}
+          {/* QR Configuration */}
+          {/* ================================================= */}
 
+          <div className="mt-8 bg-slate-900/70 border border-slate-700 rounded-2xl p-6">
+
+            <div className="flex items-start gap-4">
+
+              <div className="p-3 rounded-xl bg-cyan-500/10">
+
+                <QrCode
+                  size={28}
+                  className="text-cyan-400"
+                />
+
+              </div>
+
+
+              <div>
+
+                <h3 className="text-lg font-semibold">
+                  Certificate QR Code
+                </h3>
+
+                <p className="text-sm text-slate-400 mt-1">
+                  Tell BlockVerify whether the uploaded
+                  certificate already contains a QR code.
+                </p>
+
+              </div>
+
+            </div>
+
+
+            <div className="mt-5 space-y-4">
+
+
+              {/* Existing QR */}
+
+              <label
+                className={`flex items-start gap-4 p-4 rounded-xl border cursor-pointer transition ${
+                  hasExistingQR
+                    ? "border-cyan-400 bg-cyan-500/10"
+                    : "border-slate-700 hover:border-slate-500"
+                }`}
+              >
+
+                <input
+                  type="radio"
+                  name="qrOption"
+                  checked={hasExistingQR}
+                  onChange={() =>
+                    setHasExistingQR(true)
+                  }
+                  className="mt-1"
+                />
+
+
+                <div>
+
+                  <div className="flex items-center gap-2">
+
+                    <ShieldCheck
+                      size={20}
+                      className="text-cyan-400"
+                    />
+
+                    <span className="font-medium">
+                      Certificate already has a QR
+                    </span>
+
+                  </div>
+
+                  <p className="text-sm text-slate-400 mt-1">
+
+                    Preserve the existing QR code.
+                    BlockVerify will not modify the
+                    certificate PDF.
+
+                  </p>
+
+                  <p className="text-xs text-cyan-400 mt-2">
+
+                    Example: your existing Cloud
+                    Computing certificate.
+
+                  </p>
+
+                </div>
+
+              </label>
+
+
+              {/* Generate QR */}
+
+              <label
+                className={`flex items-start gap-4 p-4 rounded-xl border cursor-pointer transition ${
+                  !hasExistingQR
+                    ? "border-cyan-400 bg-cyan-500/10"
+                    : "border-slate-700 hover:border-slate-500"
+                }`}
+              >
+
+                <input
+                  type="radio"
+                  name="qrOption"
+                  checked={!hasExistingQR}
+                  onChange={() =>
+                    setHasExistingQR(false)
+                  }
+                  className="mt-1"
+                />
+
+
+                <div>
+
+                  <div className="flex items-center gap-2">
+
+                    <QrCode
+                      size={20}
+                      className="text-cyan-400"
+                    />
+
+                    <span className="font-medium">
+                      Generate BlockVerify QR
+                    </span>
+
+                  </div>
+
+                  <p className="text-sm text-slate-400 mt-1">
+
+                    BlockVerify will generate a
+                    certificate ID and QR code and
+                    add it to the certificate.
+
+                  </p>
+
+                </div>
+
+              </label>
+
+            </div>
+
+          </div>
+
+
+          {/* ================================================= */}
+          {/* Certificate Details */}
+          {/* ================================================= */}
 
           <div className="grid md:grid-cols-2 gap-6 mt-10">
 
 
+            {/* Title */}
 
             <div>
 
@@ -190,35 +407,28 @@ export default function UploadPage() {
                 Certificate Title
               </label>
 
-
               <div className="flex items-center bg-slate-900 rounded-xl px-4">
 
-
-                <BookOpen className="text-cyan-400"/>
-
-
-                <input
-
-                  type="text"
-
-                  placeholder="Certificate Title"
-
-                  value={title}
-
-                  onChange={(e)=>setTitle(e.target.value)}
-
-                  className="w-full bg-transparent p-4 outline-none"
-
+                <BookOpen
+                  className="text-cyan-400"
                 />
 
+                <input
+                  type="text"
+                  placeholder="Certificate Title"
+                  value={title}
+                  onChange={(e) =>
+                    setTitle(e.target.value)
+                  }
+                  className="w-full bg-transparent p-4 outline-none"
+                />
 
               </div>
-
 
             </div>
 
 
-
+            {/* Certificate Type */}
 
             <div>
 
@@ -226,15 +436,14 @@ export default function UploadPage() {
                 Certificate Type
               </label>
 
-
               <select
-
                 value={certificateType}
-
-                onChange={(e)=>setCertificateType(e.target.value)}
-
+                onChange={(e) =>
+                  setCertificateType(
+                    e.target.value
+                  )
+                }
                 className="w-full bg-slate-900 rounded-xl p-4 outline-none"
-
               >
 
                 <option>Degree</option>
@@ -245,12 +454,10 @@ export default function UploadPage() {
 
               </select>
 
-
             </div>
 
 
-
-
+            {/* Issued By */}
 
             <div>
 
@@ -258,132 +465,167 @@ export default function UploadPage() {
                 Issued By
               </label>
 
-
               <div className="flex items-center bg-slate-900 rounded-xl px-4">
 
-
-                <Building2 className="text-cyan-400"/>
-
-
-                <input
-
-                  type="text"
-
-                  placeholder="Institution Name"
-
-                  value={issuedBy}
-
-                  onChange={(e)=>setIssuedBy(e.target.value)}
-
-                  className="w-full bg-transparent p-4 outline-none"
-
+                <Building2
+                  className="text-cyan-400"
                 />
 
+                <input
+                  type="text"
+                  placeholder="Institution Name"
+                  value={issuedBy}
+                  onChange={(e) =>
+                    setIssuedBy(e.target.value)
+                  }
+                  className="w-full bg-transparent p-4 outline-none"
+                />
 
               </div>
-
 
             </div>
 
 
-
-
+            {/* Issue Date */}
 
             <div>
-
 
               <label className="block mb-2 text-slate-300">
                 Issue Date
               </label>
 
-
-
               <div className="flex items-center bg-slate-900 rounded-xl px-4">
 
-
-                <Calendar className="text-cyan-400"/>
-
-
-                <input
-
-                  type="date"
-
-                  value={issueDate}
-
-                  onChange={(e)=>setIssueDate(e.target.value)}
-
-                  className="w-full bg-transparent p-4 outline-none"
-
+                <Calendar
+                  className="text-cyan-400"
                 />
 
+                <input
+                  type="date"
+                  value={issueDate}
+                  onChange={(e) =>
+                    setIssueDate(e.target.value)
+                  }
+                  className="w-full bg-transparent p-4 outline-none"
+                />
 
               </div>
 
-
             </div>
-
-
 
           </div>
 
 
-
-
+          {/* ================================================= */}
+          {/* Description */}
+          {/* ================================================= */}
 
           <div className="mt-6">
-
 
             <label className="block mb-2 text-slate-300">
               Description
             </label>
 
-
             <textarea
-
               rows={5}
-
               placeholder="Enter certificate description..."
-
               value={description}
-
-              onChange={(e)=>setDescription(e.target.value)}
-
+              onChange={(e) =>
+                setDescription(e.target.value)
+              }
               className="w-full bg-slate-900 rounded-xl p-4 outline-none"
-
             />
-
 
           </div>
 
 
-
-
-
+          {/* ================================================= */}
+          {/* Issue Button */}
+          {/* ================================================= */}
 
           <button
-
             onClick={handleUpload}
-
             disabled={loading}
-
             className="mt-8 w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed transition rounded-xl py-4 text-lg font-semibold"
-
           >
 
-            {loading ? "Issuing..." : "Issue Certificate"}
+            {loading
+              ? "Issuing..."
+              : "Issue Certificate"}
 
           </button>
 
 
+          {/* ================================================= */}
+          {/* Success Information */}
+          {/* ================================================= */}
+
+          {result && (
+
+            <div className="mt-8 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
+
+              <h3 className="text-xl font-semibold text-emerald-400">
+
+                Certificate Issued Successfully
+
+              </h3>
+
+
+              {result.certificateId && (
+
+                <p className="mt-3 text-slate-300">
+
+                  <span className="font-semibold">
+                    Certificate ID:
+                  </span>{" "}
+
+                  {result.certificateId}
+
+                </p>
+
+              )}
+
+
+              {result.verificationURL && (
+
+                <p className="mt-2 text-slate-300 break-all">
+
+                  <span className="font-semibold">
+                    Verification URL:
+                  </span>{" "}
+
+                  {result.verificationURL}
+
+                </p>
+
+              )}
+
+
+              {result.qrGenerated !== undefined && (
+
+                <p className="mt-2 text-slate-300">
+
+                  <span className="font-semibold">
+                    BlockVerify QR:
+                  </span>{" "}
+
+                  {result.qrGenerated
+                    ? "Generated"
+                    : "Existing QR preserved"}
+
+                </p>
+
+              )}
+
+            </div>
+
+          )}
 
         </div>
 
-
       </main>
-
 
     </RoleGuard>
 
   );
-
 }

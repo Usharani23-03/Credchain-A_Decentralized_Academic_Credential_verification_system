@@ -132,5 +132,72 @@ exports.verifyByHash = async (req, res) => {
         });
 
     }
-
+    
 };
+// ================= Verify By QR =================
+
+exports.verifyByQR = async (req, res) => {
+    try {
+        const { certificateId } = req.body;
+
+        if (!certificateId) {
+            return res.status(400).json({
+                verified: false,
+                message: "Certificate ID is required."
+            });
+        }
+
+        console.log("QR Verification - Certificate ID:", certificateId);
+
+        // Find certificate in PostgreSQL
+        const document = await prisma.document.findFirst({
+            where: {
+                blockchainTxId: certificateId
+            }
+        });
+
+        if (!document) {
+            return res.status(404).json({
+                verified: false,
+                message: "Certificate not found in database."
+            });
+        }
+
+        console.log("Certificate found:", document.id);
+        console.log("Stored file hash:", document.fileHash);
+        console.log("Blockchain ID:", document.blockchainTxId);
+
+        // Verify the stored certificate hash against Hyperledger Fabric
+        const blockchain = await verifyHashOnBlockchain(
+            document.blockchainTxId,
+            document.fileHash
+        );
+
+        console.log("Blockchain verification:", blockchain);
+
+        if (!blockchain.exists) {
+            return res.status(404).json({
+                verified: false,
+                blockchainVerified: false,
+                message: "Certificate could not be verified on blockchain."
+            });
+        }
+
+        return res.status(200).json({
+            verified: true,
+            blockchainVerified: true,
+            verificationMethod: "QR",
+            message: "Certificate authenticated successfully.",
+            document
+        });
+
+    } catch (error) {
+        console.error("QR Verification Error:", error);
+
+        return res.status(500).json({
+            verified: false,
+            message: "Internal Server Error"
+        });
+    }
+};
+

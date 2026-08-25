@@ -5,69 +5,239 @@ require("dotenv").config();
 
 const userRoutes = require("./routes/userRoutes");
 const documentRoutes = require("./routes/documentRoutes");
-console.log("Document routes loaded:", documentRoutes);
 const verificationRoutes = require("./routes/verificationRoutes");
 const ipfsRoutes = require("./routes/ipfsRoutes");
 const certificateRoutes = require("./routes/certificateRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+
 const app = express();
 
 const PORT = process.env.PORT || 5555;
 
+
+// ============================================================
 // Middleware
-app.use(cors());
+// ============================================================
+
+app.use(
+    cors({
+        origin: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000"
+        ],
+        credentials: true
+    })
+);
+
 app.use(express.json());
 
+
+// ============================================================
 // Static files
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// ============================================================
 
-// Health check
+app.use(
+    "/uploads",
+    express.static(
+        path.join(__dirname, "uploads")
+    )
+);
+
+
+// ============================================================
+// Health Check
+// ============================================================
+
 app.get("/", (req, res) => {
-    res.send("Backend is working!");
+
+    res.status(200).send(
+        "CredChain Backend is working!"
+    );
+
 });
 
-// Routes
-app.use("/users", userRoutes);
-app.use("/documents", documentRoutes);
-app.use("/verify", verificationRoutes);
-app.use("/ipfs", ipfsRoutes);
-app.use("/certificates", certificateRoutes);
-app.use("/dashboard", dashboardRoutes);
-app.use("/admin", adminRoutes);
-console.log("✅ Admin routes registered");
-// 404 handler
+
+// ============================================================
+// API Routes
+// ============================================================
+
+app.use(
+    "/users",
+    userRoutes
+);
+
+app.use(
+    "/documents",
+    documentRoutes
+);
+
+app.use(
+    "/verify",
+    verificationRoutes
+);
+
+app.use(
+    "/ipfs",
+    ipfsRoutes
+);
+
+app.use(
+    "/certificates",
+    certificateRoutes
+);
+
+app.use(
+    "/dashboard",
+    dashboardRoutes
+);
+
+app.use(
+    "/admin",
+    adminRoutes
+);
+
+
+// ============================================================
+// 404 Handler
+// ============================================================
+
 app.use((req, res) => {
+
     res.status(404).json({
-        message: "Route not found"
+
+        message: "Route not found",
+
+        path: req.originalUrl
+
     });
+
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-    console.error(err);
 
-    res.status(500).json({
-        message: "Internal server error"
-    });
-});
+// ============================================================
+// Global Error Handler
+// ============================================================
 
-// Start server
-if (require.main === module) {
+app.use(
+    (err, req, res, next) => {
 
-    const server = app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
+        console.error(
+            "Global server error:",
+            err
+        );
 
-    console.log("Server object created:", !!server);
+        res.status(
+            err.status || 500
+        ).json({
 
-    server.on("close", () => {
-        console.log("Server closed!");
-    });
+            message:
+                err.message ||
+                "Internal server error"
 
-    process.on("exit", (code) => {
-        console.log("Process exited with code:", code);
-    });
-}
-console.log("User routes loaded:", userRoutes);
+        });
+
+    }
+);
+
+
+// ============================================================
+// Start Server
+// ============================================================
+
+const server = app.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
+
+        console.log("");
+        console.log(
+            "========================================"
+        );
+        console.log(
+            "       CREDCHAIN BACKEND SERVER"
+        );
+        console.log(
+            "========================================"
+        );
+        console.log(
+            `Server running on port ${PORT}`
+        );
+        console.log(
+            `Local URL: http://localhost:${PORT}`
+        );
+        console.log(
+            `Health: http://localhost:${PORT}/`
+        );
+        console.log(
+            "========================================"
+        );
+        console.log("");
+
+    }
+);
+
+
+// ============================================================
+// Server Error
+// ============================================================
+
+server.on(
+    "error",
+    (error) => {
+
+        console.error(
+            "SERVER ERROR:"
+        );
+
+        console.error(error);
+
+    }
+);
+
+
+// ============================================================
+// Graceful Shutdown
+// ============================================================
+
+process.on(
+    "SIGINT",
+    () => {
+
+        console.log(
+            "\nShutting down server..."
+        );
+
+        server.close(() => {
+
+            console.log(
+                "Server closed."
+            );
+
+            process.exit(0);
+
+        });
+
+    }
+);
+
+
+process.on(
+    "SIGTERM",
+    () => {
+
+        console.log(
+            "\nSIGTERM received. Shutting down..."
+        );
+
+        server.close(() => {
+
+            process.exit(0);
+
+        });
+
+    }
+);
+
+
 module.exports = app;

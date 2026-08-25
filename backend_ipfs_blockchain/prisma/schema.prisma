@@ -26,6 +26,9 @@ model Document {
   certificateType    String
   fileName           String
   fileHash           String               @unique
+
+  certificateId     String?             
+  verificationUrl   String?
   issuedBy           String
   issueDate          DateTime
   verificationStatus VerificationStatus   @default(PENDING)

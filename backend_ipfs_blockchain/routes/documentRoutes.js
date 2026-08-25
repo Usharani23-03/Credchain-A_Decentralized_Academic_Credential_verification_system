@@ -31,7 +31,7 @@ router.post(
 router.post(
     "/verify",
     authenticateUser,
-    authorizeRoles("EMPLOYER"),
+    authorizeRoles("EMPLOYER","STUDENT"),
     upload.single("certificate"),
     verifyDocument
 );

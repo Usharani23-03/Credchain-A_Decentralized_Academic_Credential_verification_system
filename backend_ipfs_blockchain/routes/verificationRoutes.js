@@ -6,7 +6,8 @@ const upload = require("../middleware/uploadMiddleware");
 
 const {
     verifyByFile,
-    verifyByHash
+    verifyByHash,
+    verifyByQR
 } = require("../controllers/verificationController");
 
 router.post(
@@ -18,6 +19,11 @@ router.post(
 router.post(
     "/hash",
     verifyByHash
+);
+
+router.post(
+    "/qr",
+    verifyByQR
 );
 
 module.exports = router;

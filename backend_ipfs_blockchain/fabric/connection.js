@@ -16,7 +16,7 @@ const chaincodeName = "certificate";
 async function connectFabric() {
 
     const cryptoPath =
-    "\\\\wsl$\\Ubuntu\\home\\lenovo\\fabric-samples\\test-network\\organizations\\peerOrganizations\\org1.example.com";
+        "\\\\wsl$\\Ubuntu\\home\\usharani\\fabric-samples\\test-network\\organizations\\peerOrganizations\\org1.example.com";
 
 
     try {
