@@ -1,7 +1,11 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:5555";
+const API_URL = "http://127.0.0.1:5555";
 
+
+// ============================================================
+// Student Dashboard
+// ============================================================
 
 export const getStudentDashboard = async () => {
 
@@ -10,14 +14,19 @@ export const getStudentDashboard = async () => {
   const response = await axios.get(
     `${API_URL}/dashboard/student`,
     {
-      headers:{
-        Authorization:`Bearer ${token}`
+      headers: {
+        Authorization: `Bearer ${token}`
       }
     }
   );
 
   return response.data;
 };
+
+
+// ============================================================
+// University Dashboard
+// ============================================================
 
 export const getUniversityDashboard = async () => {
 
@@ -26,14 +35,19 @@ export const getUniversityDashboard = async () => {
   const response = await axios.get(
     `${API_URL}/dashboard/university`,
     {
-      headers:{
-        Authorization:`Bearer ${token}`
+      headers: {
+        Authorization: `Bearer ${token}`
       }
     }
   );
 
   return response.data;
 };
+
+
+// ============================================================
+// Employer Dashboard
+// ============================================================
 
 export const getEmployerDashboard = async () => {
 
@@ -42,14 +56,19 @@ export const getEmployerDashboard = async () => {
   const response = await axios.get(
     `${API_URL}/dashboard/employer`,
     {
-      headers:{
-        Authorization:`Bearer ${token}`
+      headers: {
+        Authorization: `Bearer ${token}`
       }
     }
   );
 
   return response.data;
 };
+
+
+// ============================================================
+// Admin Dashboard
+// ============================================================
 
 export const getAdminDashboard = async () => {
 
