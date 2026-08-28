@@ -61,16 +61,30 @@ exports.registerUser = async (req, res) => {
             }
         });
 
+        // Generate JWT immediately after registration
+        const token = jwt.sign(
+            {
+                id: user.id,
+                email: user.email,
+                role: user.role
+            },
+            process.env.JWT_SECRET,
+            {
+                expiresIn: "24h"
+            }
+        );
+
         const { password: _, ...userWithoutPassword } = user;
 
         return res.status(201).json({
             message: "User registered successfully.",
+            token,
             user: userWithoutPassword
         });
 
     } catch (error) {
 
-        console.error(error);
+        console.error("REGISTRATION ERROR:", error);
 
         return res.status(500).json({
             message: "Internal Server Error."

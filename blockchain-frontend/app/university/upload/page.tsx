@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+
 import {
   UploadCloud,
   FileText,
@@ -9,96 +10,150 @@ import {
   BookOpen,
   QrCode,
   ShieldCheck,
+  User
 } from "lucide-react";
 
 import RoleGuard from "@/components/auth/RoleGuard";
+
 import { uploadCertificate } from "../../../services/upload";
+
 
 export default function UploadPage() {
 
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] =
+    useState<File | null>(null);
 
-  const [title, setTitle] = useState("");
+  const [title, setTitle] =
+    useState("");
 
-  const [certificateType, setCertificateType] = useState("Degree");
+  const [certificateType, setCertificateType] =
+    useState("Degree");
 
-  const [issuedBy, setIssuedBy] = useState("");
+  const [issuedBy, setIssuedBy] =
+    useState("");
 
-  const [issueDate, setIssueDate] = useState("");
+  const [issueDate, setIssueDate] =
+    useState("");
 
-  const [description, setDescription] = useState("");
+  const [description, setDescription] =
+    useState("");
 
-  const [hasExistingQR, setHasExistingQR] = useState(false);
+  const [studentEmail, setStudentEmail] =
+    useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [hasExistingQR, setHasExistingQR] =
+    useState(false);
 
-  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] =
+    useState(false);
+
+  const [result, setResult] =
+    useState<any>(null);
 
 
   const handleUpload = async () => {
 
     if (!file) {
-      alert("Please select a certificate.");
+
+      alert(
+        "Please select a certificate."
+      );
+
       return;
     }
+
 
     if (file.type !== "application/pdf") {
-      alert("Please upload a PDF certificate.");
+
+      alert(
+        "Please upload a PDF certificate."
+      );
+
       return;
     }
 
-    if (!title || !certificateType || !issuedBy || !issueDate) {
-      alert("Please fill all required fields.");
+
+    if (
+      !title ||
+      !certificateType ||
+      !issuedBy ||
+      !issueDate ||
+      !studentEmail
+    ) {
+
+      alert(
+        "Please fill all required fields."
+      );
+
       return;
     }
+
 
     try {
 
       setLoading(true);
+
       setResult(null);
 
-      const formData = new FormData();
 
-      formData.append("certificate", file);
+      const formData =
+        new FormData();
 
-      formData.append("title", title);
+
+      formData.append(
+        "certificate",
+        file
+      );
+
+
+      formData.append(
+        "title",
+        title
+      );
+
 
       formData.append(
         "certificateType",
         certificateType
       );
 
+
       formData.append(
         "issuedBy",
         issuedBy
       );
+
 
       formData.append(
         "issueDate",
         issueDate
       );
 
+
       formData.append(
         "description",
         description
       );
 
-      /*
-       * Tell the backend whether the uploaded
-       * certificate already contains a QR code.
-       *
-       * true  = preserve existing QR
-       * false = BlockVerify should generate QR
-       */
+
+      formData.append(
+        "studentEmail",
+        studentEmail.trim().toLowerCase()
+      );
+
 
       formData.append(
         "hasExistingQR",
-        hasExistingQR ? "true" : "false"
+        hasExistingQR
+          ? "true"
+          : "false"
       );
 
 
       const response =
-        await uploadCertificate(formData);
+        await uploadCertificate(
+          formData
+        );
 
 
       setResult(response);
@@ -110,19 +165,21 @@ export default function UploadPage() {
       );
 
 
-      // Reset form
-
       setFile(null);
 
       setTitle("");
 
-      setCertificateType("Degree");
+      setCertificateType(
+        "Degree"
+      );
 
       setIssuedBy("");
 
       setIssueDate("");
 
       setDescription("");
+
+      setStudentEmail("");
 
       setHasExistingQR(false);
 
@@ -134,10 +191,12 @@ export default function UploadPage() {
         error
       );
 
+
       alert(
         error?.response?.data?.message ||
         "Upload failed."
       );
+
 
     } finally {
 
@@ -162,7 +221,7 @@ export default function UploadPage() {
 
           <p className="text-slate-400 mt-2">
             Issue academic certificates securely using
-            Blockchain and BlockVerify.
+            Blockchain and CredChain.
           </p>
 
         </div>
@@ -222,9 +281,11 @@ export default function UploadPage() {
               const selectedFile =
                 e.target.files?.[0];
 
+
               if (!selectedFile) {
                 return;
               }
+
 
               if (
                 selectedFile.type !==
@@ -238,12 +299,89 @@ export default function UploadPage() {
                 e.target.value = "";
 
                 return;
+
               }
 
-              setFile(selectedFile);
+
+              setFile(
+                selectedFile
+              );
 
             }}
           />
+
+
+          {/* ================================================= */}
+          {/* Student Assignment */}
+          {/* ================================================= */}
+
+          <div className="mt-8 bg-slate-900/70 border border-cyan-500/30 rounded-2xl p-6">
+
+            <div className="flex items-start gap-4">
+
+              <div className="p-3 rounded-xl bg-cyan-500/10">
+
+                <User
+                  size={28}
+                  className="text-cyan-400"
+                />
+
+              </div>
+
+
+              <div>
+
+                <h3 className="text-lg font-semibold">
+                  Assign Certificate to Student
+                </h3>
+
+                <p className="text-sm text-slate-400 mt-1">
+                  Enter the email address of the student
+                  who should receive this certificate.
+                </p>
+
+              </div>
+
+            </div>
+
+
+            <div className="mt-5">
+
+              <label className="block mb-2 text-slate-300">
+                Student Email
+              </label>
+
+
+              <div className="flex items-center bg-slate-900 rounded-xl px-4 border border-slate-700">
+
+                <User
+                  className="text-cyan-400"
+                />
+
+
+                <input
+                  type="email"
+                  placeholder="student@example.com"
+                  value={studentEmail}
+                  onChange={(e) =>
+                    setStudentEmail(
+                      e.target.value
+                    )
+                  }
+                  className="w-full bg-transparent p-4 outline-none"
+                />
+
+              </div>
+
+
+              <p className="text-xs text-slate-500 mt-2">
+                The student must already have a CredChain
+                account with this email address.
+              </p>
+
+            </div>
+
+          </div>
 
 
           {/* ================================================= */}
@@ -271,7 +409,7 @@ export default function UploadPage() {
                 </h3>
 
                 <p className="text-sm text-slate-400 mt-1">
-                  Tell BlockVerify whether the uploaded
+                  Tell CredChain whether the uploaded
                   certificate already contains a QR code.
                 </p>
 
@@ -320,18 +458,9 @@ export default function UploadPage() {
                   </div>
 
                   <p className="text-sm text-slate-400 mt-1">
-
                     Preserve the existing QR code.
-                    BlockVerify will not modify the
+                    CredChain will not modify the
                     certificate PDF.
-
-                  </p>
-
-                  <p className="text-xs text-cyan-400 mt-2">
-
-                    Example: your existing Cloud
-                    Computing certificate.
-
                   </p>
 
                 </div>
@@ -370,17 +499,14 @@ export default function UploadPage() {
                     />
 
                     <span className="font-medium">
-                      Generate BlockVerify QR
+                      Generate CredChain QR
                     </span>
 
                   </div>
 
                   <p className="text-sm text-slate-400 mt-1">
-
-                    BlockVerify will generate a
-                    certificate ID and QR code and
-                    add it to the certificate.
-
+                    CredChain will generate a
+                    certificate ID and QR code.
                   </p>
 
                 </div>
@@ -398,8 +524,6 @@ export default function UploadPage() {
 
           <div className="grid md:grid-cols-2 gap-6 mt-10">
 
-
-            {/* Title */}
 
             <div>
 
@@ -428,8 +552,6 @@ export default function UploadPage() {
             </div>
 
 
-            {/* Certificate Type */}
-
             <div>
 
               <label className="block mb-2 text-slate-300">
@@ -457,8 +579,6 @@ export default function UploadPage() {
             </div>
 
 
-            {/* Issued By */}
-
             <div>
 
               <label className="block mb-2 text-slate-300">
@@ -485,8 +605,6 @@ export default function UploadPage() {
 
             </div>
 
-
-            {/* Issue Date */}
 
             <div>
 
@@ -565,9 +683,7 @@ export default function UploadPage() {
             <div className="mt-8 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
 
               <h3 className="text-xl font-semibold text-emerald-400">
-
                 Certificate Issued Successfully
-
               </h3>
 
 
@@ -580,6 +696,27 @@ export default function UploadPage() {
                   </span>{" "}
 
                   {result.certificateId}
+
+                </p>
+
+              )}
+
+
+              {result.student && (
+
+                <p className="mt-2 text-slate-300">
+
+                  <span className="font-semibold">
+                    Student:
+                  </span>{" "}
+
+                  {result.student.name}
+
+                  {" ("}
+
+                  {result.student.email}
+
+                  {")"}
 
                 </p>
 
@@ -606,7 +743,7 @@ export default function UploadPage() {
                 <p className="mt-2 text-slate-300">
 
                   <span className="font-semibold">
-                    BlockVerify QR:
+                    CredChain QR:
                   </span>{" "}
 
                   {result.qrGenerated
@@ -628,4 +765,5 @@ export default function UploadPage() {
     </RoleGuard>
 
   );
+
 }

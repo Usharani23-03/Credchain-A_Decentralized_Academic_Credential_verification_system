@@ -15,30 +15,45 @@ model User {
   role      Role     @default(STUDENT)
   createdAt DateTime @default(now())
 
-  documents           Document[]            @relation("UserDocuments")
+  // Certificates issued/uploaded by this user
+  documents Document[] @relation("UserDocuments")
+
+  // Certificates belonging to this student
+  studentDocuments Document[] @relation("StudentDocuments")
+
   verificationHistory VerificationHistory[] @relation("EmployerVerifications")
 }
 
 model Document {
-  id                 Int                  @id @default(autoincrement())
-  title              String
-  description        String?
-  certificateType    String
-  fileName           String
-  fileHash           String               @unique
+  id              Int      @id @default(autoincrement())
+  title           String
+  description     String?
+  certificateType String
 
-  certificateId     String?             
-  verificationUrl   String?
-  issuedBy           String
-  issueDate          DateTime
-  verificationStatus VerificationStatus   @default(PENDING)
-  blockchainTxId     String?
-  ipfsHash           String?
-  sha512Hash         String?              @unique
-  uploadedAt         DateTime             @default(now())
+  fileName String
+  fileHash String @unique
 
+  certificateId   String?
+  verificationUrl String?
+
+  issuedBy  String
+  issueDate DateTime
+
+  verificationStatus VerificationStatus @default(PENDING)
+
+  blockchainTxId String?
+  ipfsHash       String?
+  sha512Hash     String? @unique
+
+  uploadedAt DateTime @default(now())
+
+  // University / issuer
   userId Int
   user   User @relation("UserDocuments", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Student who receives the certificate
+  studentId Int?
+  student   User? @relation("StudentDocuments", fields: [studentId], references: [id], onDelete: SetNull)
 
   verificationHistory VerificationHistory[]
 }
@@ -54,6 +69,7 @@ model VerificationHistory {
   verifiedAt DateTime @default(now())
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
   employer User @relation("EmployerVerifications", fields: [employerId], references: [id], onDelete: Cascade)
 }
 

@@ -51,30 +51,18 @@ exports.storeHashOnBlockchain = async (
             ipfsCID
         );
 
-        // Fabric returns the chaincode response.
+        // Fabric Gateway returns a Uint8Array.
+        // Convert it explicitly to a Node.js Buffer.
+        const rawResponse =
+            Buffer.from(result).toString("utf8").trim();
+
         let chaincodeResponse = null;
 
         try {
-            chaincodeResponse =
-                JSON.parse(result.toString());
+            chaincodeResponse = JSON.parse(rawResponse);
         } catch {
-            chaincodeResponse =
-                result.toString();
+            chaincodeResponse = rawResponse;
         }
-
-        /*
-         * IMPORTANT:
-         *
-         * certificateId is the application's credential ID.
-         *
-         * It is NOT the Fabric transaction ID.
-         *
-         * The Fabric Gateway submitTransaction call does not
-         * return the transaction ID as the chaincode payload.
-         *
-         * Your application should therefore keep certificateId
-         * separately from the actual Fabric transaction ID.
-         */
 
         console.log("");
         console.log("=================================");
@@ -169,8 +157,37 @@ exports.verifyHashOnBlockchain = async (
                 fileHash
             );
 
+        // ====================================================
+        // IMPORTANT:
+        //
+        // Fabric Gateway returns a Uint8Array.
+        //
+        // Calling result.toString() directly converts the
+        // numeric bytes into:
+        //
+        // 116,114,117,101
+        //
+        // These are the ASCII values for:
+        //
+        // t r u e
+        //
+        // Therefore we must explicitly convert the result
+        // into a Node.js Buffer before converting to UTF-8.
+        // ====================================================
+
         const response =
-            result.toString().trim();
+            Buffer.from(result)
+                .toString("utf8")
+                .trim();
+
+        console.log("");
+        console.log("=================================");
+        console.log("RAW FABRIC VERIFY RESPONSE");
+        console.log("=================================");
+        console.log("Response:", response);
+        console.log("Response length:", response.length);
+        console.log("Response JSON:", JSON.stringify(response));
+        console.log("=================================");
 
         const exists =
             response === "true";

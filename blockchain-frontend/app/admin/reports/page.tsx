@@ -136,7 +136,7 @@ export default function ReportsPage() {
           title="Universities"
           value={data.universities}
           icon={<ShieldCheck size={28} />}
-          color="blue"
+          color="cyan"
         />
 
       </div>

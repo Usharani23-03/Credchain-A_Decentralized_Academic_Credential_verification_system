@@ -1,0 +1,154 @@
+const grpc = require("@grpc/grpc-js");
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+
+const {
+    connect,
+    signers
+} = require("@hyperledger/fabric-gateway");
+
+const channelName = "mychannel";
+const chaincodeName = "certificate";
+
+async function connectFabric() {
+
+    const cryptoPath =
+        "\\\\wsl$\\Ubuntu\\home\\keerthana\\fabric-samples\\test-network\\organizations\\peerOrganizations\\org1.example.com";
+
+    try {
+
+        // ============================================================
+        // ADMIN CERTIFICATE
+        // ============================================================
+
+        const certPath = path.join(
+            cryptoPath,
+            "users/Admin@org1.example.com/msp/signcerts"
+        );
+
+        const certFiles = fs.readdirSync(certPath);
+
+        if (certFiles.length === 0) {
+            throw new Error(
+                "No Admin certificate found in: " + certPath
+            );
+        }
+
+        const credentials = fs.readFileSync(
+            path.join(certPath, certFiles[0])
+        );
+
+        console.log("Certificate loaded");
+
+
+        // ============================================================
+        // ADMIN PRIVATE KEY
+        // ============================================================
+
+        const keyPath = path.join(
+            cryptoPath,
+            "users/Admin@org1.example.com/msp/keystore"
+        );
+
+        const keyFiles = fs.readdirSync(keyPath);
+
+        if (keyFiles.length === 0) {
+            throw new Error(
+                "No private key found in: " + keyPath
+            );
+        }
+
+        const privateKeyPem = fs.readFileSync(
+            path.join(keyPath, keyFiles[0]),
+            "utf8"
+        );
+
+        const privateKey = crypto.createPrivateKey({
+            key: privateKeyPem,
+            format: "pem"
+        });
+
+        console.log("Private key loaded");
+
+
+        // ============================================================
+        // ORG1 PEER TLS CA
+        // ============================================================
+
+        const tlsCaPath = path.join(
+            cryptoPath,
+            "peers/peer0.org1.example.com/tls/ca.crt"
+        );
+
+        const tlsCaCertificate =
+            fs.readFileSync(tlsCaPath);
+
+        console.log("TLS CA certificate loaded");
+
+
+        // ============================================================
+        // GRPC CLIENT
+        // ============================================================
+
+        const client = new grpc.Client(
+            "localhost:7051",
+            grpc.credentials.createSsl(
+                tlsCaCertificate
+            )
+        );
+
+        console.log("gRPC client created");
+
+
+        // ============================================================
+        // FABRIC GATEWAY
+        // ============================================================
+
+        const gateway = connect({
+            client,
+
+            identity: {
+                mspId: "Org1MSP",
+                credentials
+            },
+
+            signer: signers.newPrivateKeySigner(
+                privateKey
+            )
+        });
+
+        console.log("Fabric Gateway connected");
+
+
+        // ============================================================
+        // NETWORK
+        // ============================================================
+
+        const network =
+            gateway.getNetwork(channelName);
+
+        const contract =
+            network.getContract(chaincodeName);
+
+        console.log(
+            `Fabric contract loaded: ${chaincodeName}`
+        );
+
+
+        return contract;
+
+    } catch (error) {
+
+        console.error("");
+        console.error("=================================");
+        console.error("FABRIC CONNECTION ERROR");
+        console.error("=================================");
+        console.error(error.message);
+        console.error("=================================");
+
+        throw error;
+    }
+}
+
+module.exports = connectFabric;

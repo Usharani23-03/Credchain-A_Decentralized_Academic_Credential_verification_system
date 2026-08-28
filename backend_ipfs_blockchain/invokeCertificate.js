@@ -1,56 +1,129 @@
 const connectFabric = require("./blockchain/fabricConnection");
 
 async function createCertificate() {
-
     try {
+        // ================================================
+        // CONNECT TO HYPERLEDGER FABRIC
+        // ================================================
 
-        const gateway = await connectFabric();
+        const contract = await connectFabric();
 
-        const network = await gateway.getNetwork("mychannel");
+        // ================================================
+        // CREATE TRANSACTION PROPOSAL
+        // ================================================
 
-        const contract = network.getContract("certificate");
+        console.log("Creating transaction proposal...");
 
-        console.log("Submitting transaction...");
-
-        const result = await contract.submitTransaction(
+        const proposal = contract.newProposal(
             "CreateCertificate",
-            "CERT001",
-            "Umme Rumaan",
-            "CS001",
-            "Computer Science",
-            "University",
-            "sha512_test_hash",
-            "QmTestCID123"
+            {
+                arguments: [
+                    "CERT007",
+                    "Umme Rumaan",
+                    "CS001",
+                    "Computer Science",
+                    "University",
+                    "sha512_test_hash_node_006",
+                    "QmTestCIDNode006"
+                ]
+            }
         );
 
-        console.log("Certificate created successfully ✅");
+        // ================================================
+        // REQUEST ENDORSEMENTS
+        // ================================================
 
-        if (result && result.length > 0) {
-            console.log("Blockchain response:");
-            console.log(result.toString());
+        console.log("Requesting endorsements...");
+
+        const transaction = await proposal.endorse();
+
+        console.log("Endorsements successful.");
+
+        // ================================================
+        // SUBMIT TRANSACTION
+        // ================================================
+
+        console.log(
+            "Submitting transaction to blockchain..."
+        );
+
+        const commit = await transaction.submit();
+
+        // ================================================
+        // WAIT FOR COMMIT
+        // ================================================
+
+        console.log(
+            "Waiting for transaction commit..."
+        );
+
+        const status = await commit.getStatus();
+
+        // ================================================
+        // CHECK COMMIT STATUS
+        // ================================================
+
+        if (status.successful) {
+            console.log("");
+            console.log("========================================");
+            console.log("TRANSACTION COMMITTED SUCCESSFULLY");
+            console.log("========================================");
+
+            console.log(
+                "Block number:",
+                status.blockNumber.toString()
+            );
+
+            console.log(
+                "Transaction ID:",
+                status.transactionId
+            );
+
+            console.log(
+                "Status code:",
+                status.code
+            );
+
+            console.log(
+                "Successful:",
+                status.successful
+            );
+
+            console.log("========================================");
+            console.log("");
         } else {
-            console.log("No response returned from chaincode");
-        }
+            console.error(
+                "Transaction was committed but was not successful."
+            );
 
-        await gateway.disconnect();
+            console.error(
+                "Status code:",
+                status.code
+            );
+        }
 
     } catch (error) {
 
-        console.log("Transaction failed ❌");
+        console.error("");
+        console.error(
+            "========================================"
+        );
+        console.error(
+            "TRANSACTION FAILED"
+        );
+        console.error(
+            "========================================"
+        );
 
-        console.log("Error message:");
-        console.log(error.message);
+        console.error(error);
 
-        if (error.responses) {
-            console.log("Peer responses:");
-
-            error.responses.forEach((response) => {
-                console.log(response.message);
-            });
-        }
-
-        console.log(error);
+        process.exitCode = 1;
     }
 }
+
+
+// ================================================
+// RUN
+// ================================================
 
 createCertificate();
