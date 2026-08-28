@@ -22,6 +22,9 @@ model User {
   studentDocuments Document[] @relation("StudentDocuments")
 
   verificationHistory VerificationHistory[] @relation("EmployerVerifications")
+
+  // Notifications belonging to this user
+  notifications Notification[]
 }
 
 model Document {
@@ -71,6 +74,21 @@ model VerificationHistory {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   employer User @relation("EmployerVerifications", fields: [employerId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  title     String
+  message   String
+  type      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 enum Role {

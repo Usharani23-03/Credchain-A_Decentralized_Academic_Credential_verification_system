@@ -5,7 +5,8 @@ const {
     verifyHashOnBlockchain
 } = require("../services/blockchainService");
 
-const uploadToPinata = require("../services/pinataService");
+const uploadToPinata =
+    require("../services/pinataService");
 
 const generateSHA512 =
     require("../utils/hashGenerator");
@@ -22,7 +23,49 @@ const { PDFDocument } =
 
 
 // ============================================================
-// Helper: Create Certificate PDF with BlockVerify QR
+// Helper: Create Notification
+// ============================================================
+
+const createNotification = async (
+    userId,
+    title,
+    message,
+    type = "INFO"
+) => {
+
+    try {
+
+        if (!userId) {
+            return null;
+        }
+
+        return await prisma.notification.create({
+            data: {
+                userId,
+                title,
+                message,
+                type,
+                isRead: false
+            }
+        });
+
+    } catch (error) {
+
+        console.error(
+            "NOTIFICATION CREATION ERROR:",
+            error.message
+        );
+
+        // Notification failure should not stop
+        // certificate issuing or verification
+        return null;
+    }
+
+};
+
+
+// ============================================================
+// Helper: Create Certificate PDF with QR
 // ============================================================
 
 const createCertificateWithQR = async (
@@ -36,15 +79,19 @@ const createCertificateWithQR = async (
         fs.readFileSync(originalPdfPath);
 
     const pdfDoc =
-        await PDFDocument.load(existingPdfBytes);
+        await PDFDocument.load(
+            existingPdfBytes
+        );
 
     const pages =
         pdfDoc.getPages();
 
     if (!pages.length) {
+
         throw new Error(
             "Certificate PDF has no pages."
         );
+
     }
 
     const page =
@@ -66,48 +113,65 @@ const createCertificateWithQR = async (
         );
 
     const qrImage =
-        await pdfDoc.embedPng(qrBytes);
+        await pdfDoc.embedPng(
+            qrBytes
+        );
 
     const qrSize = 100;
 
     const margin = 40;
 
     let qrX = margin;
+
     let qrY = margin + 30;
 
-    if (qrY + qrSize + 40 > height) {
+    if (
+        qrY + qrSize + 40 > height
+    ) {
+
         qrY = 40;
+
     }
 
-    if (qrX + qrSize > width) {
+    if (
+        qrX + qrSize > width
+    ) {
+
         qrX =
             width -
             qrSize -
             margin;
+
     }
 
     page.drawImage(qrImage, {
+
         x: qrX,
         y: qrY,
         width: qrSize,
         height: qrSize
+
     });
 
     page.drawText(
         `Certificate ID: ${certificateId}`,
         {
+
             x: qrX,
             y: qrY - 15,
             size: 7
+
         }
     );
 
     page.drawText(
         "Scan QR to verify",
         {
+
             x: qrX,
             y: qrY + qrSize + 5,
             size: 8
+
         }
     );
 
@@ -126,9 +190,13 @@ const createCertificateWithQR = async (
 // Upload / Issue Document
 // ============================================================
 
-exports.uploadDocument = async (req, res) => {
+exports.uploadDocument = async (
+    req,
+    res
+) => {
 
     let originalFilePath = null;
+
     let finalFilePath = null;
 
     try {
@@ -136,8 +204,10 @@ exports.uploadDocument = async (req, res) => {
         if (!req.file) {
 
             return res.status(400).json({
+
                 message:
                     "Please upload a PDF file."
+
             });
 
         }
@@ -146,7 +216,9 @@ exports.uploadDocument = async (req, res) => {
             req.file.path;
 
 
+        // ====================================================
         // Validate PDF
+        // ====================================================
 
         if (
             req.file.mimetype !==
@@ -166,14 +238,21 @@ exports.uploadDocument = async (req, res) => {
             }
 
             return res.status(400).json({
+
                 message:
                     "Only PDF certificates are allowed."
+
             });
 
         }
 
 
+        // ====================================================
+        // Get Request Data
+        // ====================================================
+
         let {
+
             title,
             description,
             certificateType,
@@ -181,10 +260,13 @@ exports.uploadDocument = async (req, res) => {
             issueDate,
             hasExistingQR,
             studentEmail
+
         } = req.body;
 
 
-        // Validate required fields
+        // ====================================================
+        // Validate Required Fields
+        // ====================================================
 
         if (
             !title ||
@@ -206,14 +288,18 @@ exports.uploadDocument = async (req, res) => {
             }
 
             return res.status(400).json({
+
                 message:
                     "All required fields must be provided."
+
             });
 
         }
 
 
-        // Clean input
+        // ====================================================
+        // Clean Input
+        // ====================================================
 
         title =
             title.trim();
@@ -237,7 +323,9 @@ exports.uploadDocument = async (req, res) => {
                 : null;
 
 
-        // Find Student
+        // ====================================================
+        // Student Email Required
+        // ====================================================
 
         if (!studentEmail) {
 
@@ -254,18 +342,29 @@ exports.uploadDocument = async (req, res) => {
             }
 
             return res.status(400).json({
+
                 message:
                     "Student email is required."
+
             });
 
         }
 
 
+        // ====================================================
+        // Find Student
+        // ====================================================
+
         const student =
             await prisma.user.findUnique({
+
                 where: {
-                    email: studentEmail
+
+                    email:
+                        studentEmail
+
                 }
+
             });
 
 
@@ -284,15 +383,18 @@ exports.uploadDocument = async (req, res) => {
             }
 
             return res.status(404).json({
+
                 message:
                     "Student with the provided email was not found."
+
             });
 
         }
 
 
         if (
-            student.role !== "STUDENT"
+            student.role !==
+            "STUDENT"
         ) {
 
             if (
@@ -308,8 +410,10 @@ exports.uploadDocument = async (req, res) => {
             }
 
             return res.status(400).json({
+
                 message:
                     "The provided email does not belong to a student."
+
             });
 
         }
@@ -320,31 +424,42 @@ exports.uploadDocument = async (req, res) => {
 
 
         console.log("");
-        console.log(
-            "================================="
-        );
-        console.log(
-            "STUDENT ASSIGNMENT"
-        );
-        console.log(
-            "================================="
-        );
-        console.log(
-            "Student:",
-            student.name
-        );
-        console.log(
-            "Student Email:",
-            student.email
-        );
-        console.log(
-            "Student ID:",
-            studentId
-        );
+
         console.log(
             "================================="
         );
 
+        console.log(
+            "STUDENT ASSIGNMENT"
+        );
+
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "Student:",
+            student.name
+        );
+
+        console.log(
+            "Student Email:",
+            student.email
+        );
+
+        console.log(
+            "Student ID:",
+            studentId
+        );
+
+        console.log(
+            "================================="
+        );
+
+
+        // ====================================================
+        // QR Handling
+        // ====================================================
 
         const preserveExistingQR =
             hasExistingQR === "true" ||
@@ -355,12 +470,16 @@ exports.uploadDocument = async (req, res) => {
             `CERT-${Date.now()}`;
 
 
-        let verificationURL = null;
+        let verificationURL =
+            null;
 
-        let qrGenerated = false;
+        let qrGenerated =
+            false;
+
 
         let finalFileName =
             req.file.originalname;
+
 
         finalFilePath =
             path.join(
@@ -371,7 +490,9 @@ exports.uploadDocument = async (req, res) => {
             );
 
 
-        if (preserveExistingQR) {
+        if (
+            preserveExistingQR
+        ) {
 
             finalFilePath =
                 originalFilePath;
@@ -389,7 +510,8 @@ exports.uploadDocument = async (req, res) => {
             verificationURL =
                 qr.verificationURL;
 
-            qrGenerated = true;
+            qrGenerated =
+                true;
 
             finalFileName =
                 `certificate-${certificateId}.pdf`;
@@ -402,17 +524,25 @@ exports.uploadDocument = async (req, res) => {
                     finalFileName
                 );
 
+
             await createCertificateWithQR(
+
                 originalFilePath,
+
                 finalFilePath,
+
                 qr.qrDataURL,
+
                 certificateId
+
             );
 
         }
 
 
-        // Generate SHA-512
+        // ====================================================
+        // Generate SHA-512 Hash
+        // ====================================================
 
         const sha512Hash =
             generateSHA512(
@@ -423,13 +553,19 @@ exports.uploadDocument = async (req, res) => {
             sha512Hash;
 
 
-        // Check duplicate
+        // ====================================================
+        // Check Duplicate Certificate
+        // ====================================================
 
         const existingDocument =
             await prisma.document.findUnique({
+
                 where: {
+
                     fileHash
+
                 }
+
             });
 
 
@@ -447,6 +583,7 @@ exports.uploadDocument = async (req, res) => {
 
             }
 
+
             if (
                 finalFilePath !==
                 originalFilePath &&
@@ -461,20 +598,28 @@ exports.uploadDocument = async (req, res) => {
 
             }
 
+
             return res.status(409).json({
+
                 message:
                     "Certificate already exists."
+
             });
 
         }
 
 
+        // ====================================================
         // Upload to IPFS
+        // ====================================================
 
         const ipfsResult =
             await uploadToPinata(
+
                 finalFilePath,
+
                 finalFileName
+
             );
 
 
@@ -490,17 +635,27 @@ exports.uploadDocument = async (req, res) => {
         }
 
 
+        // ====================================================
         // Store on Blockchain
+        // ====================================================
 
         const blockchain =
             await storeHashOnBlockchain(
+
                 sha512Hash,
+
                 certificateId,
+
                 title,
+
                 certificateId,
+
                 certificateType,
+
                 issuedBy,
+
                 ipfsResult.IpfsHash
+
             );
 
 
@@ -520,6 +675,7 @@ exports.uploadDocument = async (req, res) => {
 
             }
 
+
             if (
                 originalFilePath &&
                 fs.existsSync(
@@ -533,20 +689,27 @@ exports.uploadDocument = async (req, res) => {
 
             }
 
+
             return res.status(500).json({
+
                 message:
                     "Failed to store certificate on blockchain.",
+
                 error:
                     blockchain.error
+
             });
 
         }
 
 
+        // ====================================================
         // Store in PostgreSQL
+        // ====================================================
 
         const document =
             await prisma.document.create({
+
                 data: {
 
                     title,
@@ -568,7 +731,9 @@ exports.uploadDocument = async (req, res) => {
                     issuedBy,
 
                     issueDate:
-                        new Date(issueDate),
+                        new Date(
+                            issueDate
+                        ),
 
                     blockchainTxId:
                         certificateId,
@@ -582,13 +747,55 @@ exports.uploadDocument = async (req, res) => {
                     userId:
                         req.user.id,
 
-                    // Student / credential owner
+                    // Student / owner
                     studentId:
                         studentId
 
                 }
+
             });
 
+
+        // ====================================================
+        // CREATE REAL NOTIFICATIONS
+        // ====================================================
+
+        // Notification for University
+        await createNotification(
+
+            req.user.id,
+
+            "Certificate Issued",
+
+            `You successfully issued "${title}" to ${student.name}.`,
+
+            "CERTIFICATE_ISSUED"
+
+        );
+
+
+        // Notification for Student
+        await createNotification(
+
+            student.id,
+
+            "New Certificate Received",
+
+            `${issuedBy} issued you a new certificate: "${title}".`,
+
+            "CERTIFICATE_RECEIVED"
+
+        );
+
+
+        console.log(
+            "Notifications created for university and student."
+        );
+
+
+        // ====================================================
+        // Remove Original File
+        // ====================================================
 
         if (
             finalFilePath !==
@@ -606,6 +813,10 @@ exports.uploadDocument = async (req, res) => {
         }
 
 
+        // ====================================================
+        // Response
+        // ====================================================
+
         return res.status(201).json({
 
             message:
@@ -621,9 +832,16 @@ exports.uploadDocument = async (req, res) => {
                 preserveExistingQR,
 
             student: {
-                id: student.id,
-                name: student.name,
-                email: student.email
+
+                id:
+                    student.id,
+
+                name:
+                    student.name,
+
+                email:
+                    student.email
+
             },
 
             document
@@ -670,10 +888,13 @@ exports.uploadDocument = async (req, res) => {
 
 
         return res.status(500).json({
+
             message:
                 "Internal Server Error",
+
             error:
                 error.message
+
         });
 
     }
@@ -685,59 +906,61 @@ exports.uploadDocument = async (req, res) => {
 // Get My Documents
 // ============================================================
 
-exports.getMyDocuments = async (req, res) => {
+exports.getMyDocuments = async (
+    req,
+    res
+) => {
 
     try {
 
         let whereClause = {};
 
 
-        // STUDENT:
-        // Show certificates issued TO the student
-
+        // STUDENT
         if (
-            req.user.role === "STUDENT"
+            req.user.role ===
+            "STUDENT"
         ) {
 
             whereClause = {
+
                 studentId:
                     req.user.id
+
             };
 
         }
 
 
-        // UNIVERSITY:
-        // Show certificates issued BY the university
-
+        // UNIVERSITY
         else if (
-            req.user.role === "UNIVERSITY"
+            req.user.role ===
+            "UNIVERSITY"
         ) {
 
             whereClause = {
+
                 userId:
                     req.user.id
+
             };
 
         }
 
 
-        // EMPLOYER:
-        // They do not own certificates
-
+        // EMPLOYER
         else if (
-            req.user.role === "EMPLOYER"
+            req.user.role ===
+            "EMPLOYER"
         ) {
 
             return res.status(200).json({
+
                 documents: []
+
             });
 
         }
-
-
-        // ADMIN:
-        // No filter → all documents
 
 
         const documents =
@@ -747,15 +970,19 @@ exports.getMyDocuments = async (req, res) => {
                     whereClause,
 
                 orderBy: {
+
                     uploadedAt:
                         "desc"
+
                 }
 
             });
 
 
         return res.status(200).json({
+
             documents
+
         });
 
 
@@ -766,9 +993,12 @@ exports.getMyDocuments = async (req, res) => {
             error
         );
 
+
         return res.status(500).json({
+
             message:
                 "Internal Server Error"
+
         });
 
     }
@@ -781,29 +1011,42 @@ exports.getMyDocuments = async (req, res) => {
 // ============================================================
 
 const canAccessDocument =
-    (document, user) => {
+    (
+        document,
+        user
+    ) => {
 
         if (
-            user.role === "ADMIN"
+            user.role ===
+            "ADMIN"
         ) {
+
             return true;
+
         }
+
 
         // University that issued certificate
         if (
             document.userId ===
             user.id
         ) {
+
             return true;
+
         }
+
 
         // Student who owns certificate
         if (
             document.studentId ===
             user.id
         ) {
+
             return true;
+
         }
+
 
         return false;
 
@@ -815,7 +1058,10 @@ const canAccessDocument =
 // ============================================================
 
 exports.getDocumentById =
-    async (req, res) => {
+    async (
+        req,
+        res
+    ) => {
 
         try {
 
@@ -828,8 +1074,10 @@ exports.getDocumentById =
             if (isNaN(id)) {
 
                 return res.status(400).json({
+
                     message:
                         "Invalid document ID."
+
                 });
 
             }
@@ -837,17 +1085,23 @@ exports.getDocumentById =
 
             const document =
                 await prisma.document.findUnique({
+
                     where: {
+
                         id
+
                     }
+
                 });
 
 
             if (!document) {
 
                 return res.status(404).json({
+
                     message:
                         "Document not found."
+
                 });
 
             }
@@ -861,8 +1115,10 @@ exports.getDocumentById =
             ) {
 
                 return res.status(403).json({
+
                     message:
                         "Access denied."
+
                 });
 
             }
@@ -878,8 +1134,10 @@ exports.getDocumentById =
             console.error(error);
 
             return res.status(500).json({
+
                 message:
                     "Internal Server Error"
+
             });
 
         }
@@ -892,7 +1150,10 @@ exports.getDocumentById =
 // ============================================================
 
 exports.deleteDocument =
-    async (req, res) => {
+    async (
+        req,
+        res
+    ) => {
 
         try {
 
@@ -904,27 +1165,33 @@ exports.deleteDocument =
 
             const document =
                 await prisma.document.findUnique({
+
                     where: {
+
                         id
+
                     }
+
                 });
 
 
             if (!document) {
 
                 return res.status(404).json({
+
                     message:
                         "Document not found."
+
                 });
 
             }
 
 
-            // Only ADMIN or issuing UNIVERSITY
-            // should be allowed to delete certificates.
-
             const canDelete =
-                req.user.role === "ADMIN" ||
+
+                req.user.role ===
+                    "ADMIN" ||
+
                 document.userId ===
                     req.user.id;
 
@@ -932,8 +1199,10 @@ exports.deleteDocument =
             if (!canDelete) {
 
                 return res.status(403).json({
+
                     message:
                         "Access denied."
+
                 });
 
             }
@@ -941,10 +1210,15 @@ exports.deleteDocument =
 
             const filePath =
                 path.join(
+
                     __dirname,
+
                     "..",
+
                     "uploads",
+
                     document.fileName
+
                 );
 
 
@@ -962,15 +1236,35 @@ exports.deleteDocument =
 
 
             await prisma.document.delete({
+
                 where: {
+
                     id
+
                 }
+
             });
 
 
+            // Notification after deletion
+            await createNotification(
+
+                req.user.id,
+
+                "Certificate Deleted",
+
+                `The certificate "${document.title}" was deleted.`,
+
+                "CERTIFICATE_DELETED"
+
+            );
+
+
             return res.status(200).json({
+
                 message:
                     "Document deleted successfully."
+
             });
 
 
@@ -979,8 +1273,10 @@ exports.deleteDocument =
             console.error(error);
 
             return res.status(500).json({
+
                 message:
                     "Internal Server Error"
+
             });
 
         }
@@ -993,7 +1289,10 @@ exports.deleteDocument =
 // ============================================================
 
 exports.downloadDocument =
-    async (req, res) => {
+    async (
+        req,
+        res
+    ) => {
 
         try {
 
@@ -1005,17 +1304,23 @@ exports.downloadDocument =
 
             const document =
                 await prisma.document.findUnique({
+
                     where: {
+
                         id
+
                     }
-        });
+
+                });
 
 
             if (!document) {
 
                 return res.status(404).json({
+
                     message:
                         "Document not found."
+
                 });
 
             }
@@ -1029,8 +1334,10 @@ exports.downloadDocument =
             ) {
 
                 return res.status(403).json({
+
                     message:
                         "Access denied."
+
                 });
 
             }
@@ -1038,10 +1345,15 @@ exports.downloadDocument =
 
             const filePath =
                 path.join(
+
                     __dirname,
+
                     "..",
+
                     "uploads",
+
                     document.fileName
+
                 );
 
 
@@ -1052,16 +1364,21 @@ exports.downloadDocument =
             ) {
 
                 return res.status(404).json({
+
                     message:
                         "File not found."
+
                 });
 
             }
 
 
             return res.download(
+
                 filePath,
+
                 document.fileName
+
             );
 
 
@@ -1070,8 +1387,10 @@ exports.downloadDocument =
             console.error(error);
 
             return res.status(500).json({
+
                 message:
                     "Internal Server Error"
+
             });
 
         }
@@ -1084,7 +1403,10 @@ exports.downloadDocument =
 // ============================================================
 
 exports.verifyDocument =
-    async (req, res) => {
+    async (
+        req,
+        res
+    ) => {
 
         try {
 
@@ -1118,9 +1440,13 @@ exports.verifyDocument =
 
             const document =
                 await prisma.document.findFirst({
+
                     where: {
+
                         sha512Hash
+
                     }
+
                 });
 
 
@@ -1138,6 +1464,24 @@ exports.verifyDocument =
 
 
             if (!document) {
+
+                // Create failed verification notification
+                if (req.user) {
+
+                    await createNotification(
+
+                        req.user.id,
+
+                        "Certificate Verification Failed",
+
+                        "The uploaded certificate was not found or may have been modified.",
+
+                        "VERIFICATION_FAILED"
+
+                    );
+
+                }
+
 
                 return res.status(404).json({
 
@@ -1157,12 +1501,34 @@ exports.verifyDocument =
 
             const blockchain =
                 await verifyHashOnBlockchain(
+
                     document.certificateId,
+
                     sha512Hash
+
                 );
 
 
-            if (!blockchain.exists) {
+            if (
+                !blockchain.exists
+            ) {
+
+                if (req.user) {
+
+                    await createNotification(
+
+                        req.user.id,
+
+                        "Blockchain Verification Failed",
+
+                        `Certificate "${document.title}" could not be verified on the blockchain.`,
+
+                        "VERIFICATION_FAILED"
+
+                    );
+
+                }
+
 
                 return res.status(404).json({
 
@@ -1187,17 +1553,25 @@ exports.verifyDocument =
                 await prisma.document.update({
 
                     where: {
+
                         id:
                             document.id
+
                     },
 
                     data: {
+
                         verificationStatus:
                             "VERIFIED"
+
                     }
 
                 });
 
+
+            // ====================================================
+            // EMPLOYER VERIFICATION HISTORY
+            // ====================================================
 
             if (
                 req.user &&
@@ -1221,6 +1595,27 @@ exports.verifyDocument =
                     }
 
                 });
+
+            }
+
+
+            // ====================================================
+            // REAL VERIFICATION NOTIFICATION
+            // ====================================================
+
+            if (req.user) {
+
+                await createNotification(
+
+                    req.user.id,
+
+                    "Certificate Verified",
+
+                    `Certificate "${updatedDocument.title}" was verified successfully on the blockchain.`,
+
+                    "VERIFICATION_SUCCESS"
+
+                );
 
             }
 
@@ -1277,6 +1672,9 @@ exports.verifyDocument =
                     sha512Hash:
                         updatedDocument.sha512Hash,
 
+                    fileHash:
+                        updatedDocument.fileHash,
+
                     ipfsHash:
                         updatedDocument.ipfsHash,
 
@@ -1291,8 +1689,11 @@ exports.verifyDocument =
         } catch (error) {
 
             console.error(
+
                 "CERTIFICATE VERIFICATION ERROR:",
+
                 error
+
             );
 
 
@@ -1336,7 +1737,10 @@ exports.verifyDocument =
 // ============================================================
 
 exports.getVerificationHistory =
-    async (req, res) => {
+    async (
+        req,
+        res
+    ) => {
 
         try {
 
@@ -1344,25 +1748,33 @@ exports.getVerificationHistory =
                 await prisma.verificationHistory.findMany({
 
                     where: {
+
                         employerId:
                             req.user.id
+
                     },
 
                     include: {
+
                         document:
                             true
+
                     },
 
                     orderBy: {
+
                         verifiedAt:
                             "desc"
+
                     }
 
                 });
 
 
             return res.status(200).json({
+
                 history
+
             });
 
 
@@ -1371,8 +1783,10 @@ exports.getVerificationHistory =
             console.error(error);
 
             return res.status(500).json({
+
                 message:
                     "Internal Server Error"
+
             });
 
         }

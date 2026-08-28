@@ -8,13 +8,39 @@ const {
     getProfile
 } = require("../controllers/userController");
 
-const authenticateUser = require("../middleware/authMiddleware");
+const authenticateUser =
+    require("../middleware/authMiddleware");
 
-// Public Routes
-router.post("/register", registerUser);
-router.post("/login", loginUser);
 
-// Protected Route
-router.get("/profile", authenticateUser, getProfile);
+// ============================================================
+// Register User
+// ============================================================
+
+router.post(
+    "/register",
+    registerUser
+);
+
+
+// ============================================================
+// Login User
+// ============================================================
+
+router.post(
+    "/login",
+    loginUser
+);
+
+
+// ============================================================
+// Get Logged-in User Profile
+// ============================================================
+
+router.get(
+    "/profile",
+    authenticateUser,
+    getProfile
+);
+
 
 module.exports = router;
