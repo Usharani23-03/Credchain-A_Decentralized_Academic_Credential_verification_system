@@ -2,6 +2,10 @@ const prisma = require("../config/prisma");
 const crypto = require("crypto");
 const fs = require("fs");
 
+const {
+    verifyHashOnBlockchain
+} = require("../services/blockchainService");
+
 // Get all certificates
 const getAllCertificates = async (req, res) => {
     try {
@@ -108,45 +112,121 @@ const getCertificateDownloadLink = async (req, res) => {
 
 };
 
-// Verify certificate
+// Verify certificate by Certificate ID + Hyperledger Fabric
 const verifyCertificate = async (req, res) => {
 
     try {
 
-        const id = Number(req.params.certificateId);
+        const certificateId =
+            req.params.certificateId;
 
-        const certificate = await prisma.document.findUnique({
-            where: {
-                id
-            }
-        });
+        if (!certificateId) {
+            return res.status(400).json({
+                verified: false,
+                blockchainVerified: false,
+                message: "Certificate ID is required"
+            });
+        }
+
+        // --------------------------------------------------------
+        // 1. Find certificate in PostgreSQL
+        // --------------------------------------------------------
+
+        const certificate =
+            await prisma.document.findUnique({
+                where: {
+                    certificateId
+                }
+            });
 
         if (!certificate) {
             return res.status(404).json({
                 verified: false,
+                blockchainVerified: false,
                 message: "Certificate Not Found"
             });
         }
 
-        res.status(200).json({
+        // --------------------------------------------------------
+        // 2. Check whether SHA-512 hash exists
+        // --------------------------------------------------------
+
+        if (!certificate.sha512Hash) {
+            return res.status(200).json({
+                verified: false,
+                blockchainVerified: false,
+                message: "Certificate hash is missing",
+                certificate
+            });
+        }
+
+        // --------------------------------------------------------
+        // 3. Verify certificate hash on Hyperledger Fabric
+        // --------------------------------------------------------
+
+        console.log("");
+        console.log("=================================");
+        console.log("BLOCKCHAIN CERTIFICATE VERIFICATION");
+        console.log("=================================");
+        console.log("Certificate ID:", certificate.certificateId);
+        console.log("SHA-512:", certificate.sha512Hash);
+        console.log("=================================");
+
+        const blockchainResult =
+            await verifyHashOnBlockchain(
+                certificate.certificateId,
+                certificate.sha512Hash
+            );
+
+        console.log(
+            "Blockchain verification result:",
+            blockchainResult
+        );
+
+        // --------------------------------------------------------
+        // 4. Blockchain verification failed
+        // --------------------------------------------------------
+
+        if (!blockchainResult.exists) {
+
+            return res.status(200).json({
+                verified: false,
+                blockchainVerified: false,
+                message:
+                    "Certificate found in database, but blockchain verification failed.",
+                certificate
+            });
+
+        }
+
+        // --------------------------------------------------------
+        // 5. PostgreSQL + Blockchain both verified
+        // --------------------------------------------------------
+
+        return res.status(200).json({
             verified: true,
-            message: "Certificate Verified Successfully",
+            blockchainVerified: true,
+            message:
+                "Certificate verified successfully using blockchain.",
             certificate
         });
 
     } catch (error) {
 
-        console.log(error);
+        console.error(
+            "CERTIFICATE ID VERIFICATION ERROR:",
+            error
+        );
 
-        res.status(500).json({
+        return res.status(500).json({
             verified: false,
+            blockchainVerified: false,
             message: "Verification Failed"
         });
 
     }
 
 };
-
 // Verify uploaded PDF
 const verifyCertificateByFile = async (req, res) => {
 

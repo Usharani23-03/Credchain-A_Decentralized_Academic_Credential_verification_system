@@ -1,343 +1,359 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import {
-  UploadCloud,
   ShieldCheck,
   ShieldX,
-  FileText,
-  ArrowLeft,
   Loader2,
+  Database,
+  Blocks,
+  Fingerprint,
+  CheckCircle2,
 } from "lucide-react";
+import api from "../../../services/api";
 
-import { verifyCertificate } from "../../../services/verify";
+interface Certificate {
+  id: number;
+  title: string;
+  description?: string;
+  certificateType: string;
+  fileName: string;
+  certificateId: string;
+  verificationUrl?: string;
+  issuedBy: string;
+  issueDate: string;
+  verificationStatus: string;
+  blockchainTxId?: string;
+  ipfsHash?: string;
+  sha512Hash?: string;
+  uploadedAt: string;
+}
 
-interface VerificationResult {
+interface VerificationResponse {
   verified: boolean;
-  document?: {
-    title: string;
-    certificateType: string;
-    issuedBy: string;
-    issueDate: string;
-    verificationStatus: string;
-    blockchainTxId: string;
-    fileHash: string;
-  };
-  message?: string;
+  blockchainVerified?: boolean;
+  message: string;
+  certificate?: Certificate;
 }
 
 export default function CertificateVerificationPage() {
   const params = useParams();
-  const router = useRouter();
 
   const certificateId = params?.certificateId as string;
 
-  const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
-
+  const [loading, setLoading] = useState(true);
   const [result, setResult] =
-    useState<VerificationResult | null>(null);
+    useState<VerificationResponse | null>(null);
 
-  const handleVerify = async () => {
-    if (!file) {
-      alert("Please select the certificate PDF.");
-      return;
-    }
+  useEffect(() => {
+    const verifyByCertificateId = async () => {
+      if (!certificateId) return;
 
-    try {
-      setLoading(true);
-      setResult(null);
+      try {
+        setLoading(true);
 
-      const formData = new FormData();
+        const response = await api.get(
+          `/certificates/${encodeURIComponent(certificateId)}/verify`
+        );
 
-      formData.append("certificate", file);
+        console.log("Certificate verification response:", response.data);
 
-      const response = await verifyCertificate(formData);
+        setResult(response.data);
+      } catch (error: any) {
+        console.error(
+          "Certificate ID verification error:",
+          error
+        );
 
-      setResult(response);
-    } catch (error: any) {
-      setResult({
-        verified: false,
-        message:
-          error?.response?.data?.message ||
-          "Verification failed. Please try again.",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+        setResult({
+          verified: false,
+          blockchainVerified: false,
+          message:
+            error?.response?.data?.message ||
+            "Certificate verification failed.",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  return (
-    <main className="min-h-screen bg-[#020617] text-white p-6 md:p-10">
+    verifyByCertificateId();
+  }, [certificateId]);
 
-      <div className="max-w-5xl mx-auto">
+  /*
+   * LOADING
+   */
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[#020617] text-white flex items-center justify-center px-6">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 animate-spin mx-auto mb-4 text-green-400" />
 
-        <button
-          onClick={() => router.push("/verify")}
-          className="flex items-center gap-2 text-slate-400 hover:text-cyan-400 transition mb-8"
-        >
-          <ArrowLeft size={20} />
-          Back to Verification
-        </button>
+          <h1 className="text-2xl font-semibold">
+            Verifying Certificate
+          </h1>
 
-        <div className="text-center mb-10">
+          <p className="text-slate-400 mt-2">
+            Checking the certificate against its registered
+            blockchain record...
+          </p>
+        </div>
+      </main>
+    );
+  }
 
-          <div className="flex justify-center mb-5">
-            <div className="p-4 bg-cyan-500/10 rounded-2xl border border-cyan-500/30">
-              <ShieldCheck
-                size={50}
-                className="text-cyan-400"
-              />
-            </div>
-          </div>
+  /*
+   * VERIFICATION FAILED
+   */
+  if (!result?.verified || !result.certificate) {
+    return (
+      <main className="min-h-screen bg-[#020617] text-white flex items-center justify-center px-6">
+        <div className="w-full max-w-lg bg-slate-900 border border-red-500/30 rounded-2xl p-8 text-center">
 
-          <h1 className="text-4xl font-bold">
-            Certificate Verification
+          <ShieldX className="w-16 h-16 text-red-400 mx-auto mb-5" />
+
+          <h1 className="text-3xl font-bold">
+            Certificate Not Verified
           </h1>
 
           <p className="text-slate-400 mt-3">
-            Verify the authenticity of an academic certificate using CredChain.
+            {result?.message ||
+              "Certificate could not be verified."}
           </p>
 
-        </div>
-
-        <div className="bg-[#0F172A] rounded-3xl border border-slate-800 p-6 md:p-10">
-
-          <div className="bg-slate-900 rounded-2xl p-5 mb-8 border border-slate-800">
-
+          <div className="mt-6 bg-slate-800 rounded-xl p-4 text-left">
             <p className="text-sm text-slate-400">
               Certificate ID
             </p>
 
-            <div className="flex items-center gap-3 mt-2">
+            <p className="font-mono text-white break-all mt-1">
+              {certificateId}
+            </p>
+          </div>
 
-              <FileText
-                size={22}
-                className="text-cyan-400"
-              />
+          {result?.blockchainVerified === false && (
+            <div className="mt-4 text-sm text-red-300">
+              Blockchain verification failed.
+            </div>
+          )}
+        </div>
+      </main>
+    );
+  }
 
-              <p className="text-lg md:text-xl font-semibold text-cyan-400 break-all">
-                {certificateId}
+  const certificate = result.certificate;
+
+  /*
+   * SUCCESS
+   */
+  return (
+    <main className="min-h-screen bg-[#020617] text-white px-6 py-12">
+
+      <div className="max-w-3xl mx-auto">
+
+        {/* SUCCESS HEADER */}
+        <div className="bg-slate-900 border border-green-500/30 rounded-2xl p-8 text-center">
+
+          <ShieldCheck className="w-20 h-20 text-green-400 mx-auto mb-5" />
+
+          <h1 className="text-4xl font-bold">
+            Certificate Verified
+          </h1>
+
+          <p className="text-slate-400 mt-3">
+            This certificate has been successfully verified
+            against its registered blockchain record.
+          </p>
+
+          <div className="mt-6 inline-block bg-green-500/10 border border-green-500/20 rounded-xl px-5 py-3">
+
+            <p className="text-xs text-slate-400">
+              Certificate ID
+            </p>
+
+            <p className="font-mono text-green-400 mt-1 break-all">
+              {certificate.certificateId}
+            </p>
+
+          </div>
+        </div>
+
+        {/* CERTIFICATE DETAILS */}
+        <div className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-8">
+
+          <h2 className="text-2xl font-semibold mb-6">
+            Certificate Details
+          </h2>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+
+            <div>
+              <p className="text-sm text-slate-400">
+                Certificate Title
               </p>
+
+              <p className="mt-1 font-medium">
+                {certificate.title}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">
+                Certificate Type
+              </p>
+
+              <p className="mt-1 font-medium">
+                {certificate.certificateType}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">
+                Issued By
+              </p>
+
+              <p className="mt-1 font-medium">
+                {certificate.issuedBy}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">
+                Issue Date
+              </p>
+
+              <p className="mt-1 font-medium">
+                {new Date(
+                  certificate.issueDate
+                ).toLocaleDateString()}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">
+                Verification Status
+              </p>
+
+              <p className="mt-1 font-medium text-green-400">
+                VERIFIED
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">
+                Certificate ID
+              </p>
+
+              <p className="mt-1 font-mono text-sm break-all">
+                {certificate.certificateId}
+              </p>
+            </div>
+
+          </div>
+
+          {certificate.description && (
+            <div className="mt-6">
+              <p className="text-sm text-slate-400">
+                Description
+              </p>
+
+              <p className="mt-1 text-slate-200">
+                {certificate.description}
+              </p>
+            </div>
+          )}
+
+        </div>
+
+        {/* VERIFICATION INFORMATION */}
+        <div className="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-8">
+
+          <h2 className="text-2xl font-semibold mb-6">
+            Verification Information
+          </h2>
+
+          <div className="space-y-4">
+
+            {/* DATABASE */}
+            <div className="flex items-center gap-4 bg-slate-800/60 rounded-xl p-4">
+
+              <Database className="w-7 h-7 text-green-400" />
+
+              <div className="flex-1">
+                <p className="text-sm text-slate-400">
+                  Database Record
+                </p>
+
+                <p className="font-medium text-white">
+                  Certificate Found
+                </p>
+              </div>
+
+              <CheckCircle2 className="w-6 h-6 text-green-400" />
+
+            </div>
+
+            {/* SHA-512 */}
+            <div className="flex items-center gap-4 bg-slate-800/60 rounded-xl p-4">
+
+              <Fingerprint className="w-7 h-7 text-green-400" />
+
+              <div className="flex-1">
+                <p className="text-sm text-slate-400">
+                  SHA-512 Integrity
+                </p>
+
+                <p className="font-medium text-white">
+                  Hash Matched
+                </p>
+              </div>
+
+              <CheckCircle2 className="w-6 h-6 text-green-400" />
+
+            </div>
+
+            {/* BLOCKCHAIN */}
+            <div className="flex items-center gap-4 bg-slate-800/60 rounded-xl p-4">
+
+              <Blocks className="w-7 h-7 text-green-400" />
+
+              <div className="flex-1">
+                <p className="text-sm text-slate-400">
+                  Hyperledger Fabric
+                </p>
+
+                <p className="font-medium text-white">
+                  Blockchain Verified
+                </p>
+              </div>
+
+              <CheckCircle2 className="w-6 h-6 text-green-400" />
 
             </div>
 
           </div>
 
-          <h2 className="text-2xl font-semibold">
-            Upload Certificate
-          </h2>
+          {/* FINAL STATUS */}
+          <div className="mt-6 bg-green-500/10 border border-green-500/30 rounded-xl p-5 text-center">
 
-          <p className="text-slate-400 mt-2 mb-6">
-            Upload the original certificate PDF to verify its authenticity
-            against the stored blockchain record.
-          </p>
+            <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />
 
-          <label
-            htmlFor="certificate"
-            className="border-2 border-dashed border-cyan-500/60 rounded-2xl p-10 md:p-14 flex flex-col items-center cursor-pointer hover:bg-slate-900 transition"
-          >
-
-            <UploadCloud
-              size={60}
-              className="text-cyan-400"
-            />
-
-            <h3 className="text-xl md:text-2xl mt-5 font-semibold">
-              Select Certificate PDF
-            </h3>
-
-            <p className="text-slate-400 mt-2">
-              Click here to browse your certificate
+            <p className="text-green-400 font-semibold text-lg">
+              Certificate Integrity Verified
             </p>
 
-            {file && (
-              <div className="mt-6 text-center">
-
-                <p className="text-cyan-400 font-medium">
-                  Selected File
-                </p>
-
-                <p className="text-slate-300 mt-1 break-all">
-                  {file.name}
-                </p>
-
-              </div>
-            )}
-
-          </label>
-
-          <input
-            id="certificate"
-            hidden
-            type="file"
-            accept=".pdf"
-            onChange={(e) => {
-              if (e.target.files?.length) {
-                setFile(e.target.files[0]);
-                setResult(null);
-              }
-            }}
-          />
-
-          <button
-            onClick={handleVerify}
-            disabled={loading || !file}
-            className="mt-8 w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed rounded-xl py-4 font-semibold text-slate-950 transition flex items-center justify-center gap-3"
-          >
-
-            {loading && (
-              <Loader2
-                size={22}
-                className="animate-spin"
-              />
-            )}
-
-            {loading
-              ? "Verifying Certificate..."
-              : "Verify Certificate"}
-
-          </button>
-
-        </div>
-
-        {result && (
-
-          <div className="mt-8 bg-[#0F172A] rounded-3xl border border-slate-800 p-6 md:p-8">
-
-            {result.verified ? (
-
-              <>
-
-                <div className="flex items-center gap-3 text-green-400">
-
-                  <ShieldCheck size={40} />
-
-                  <div>
-
-                    <h2 className="text-3xl font-bold">
-                      Certificate Verified
-                    </h2>
-
-                    <p className="text-slate-400 mt-1">
-                      This certificate is authentic and verified successfully.
-                    </p>
-
-                  </div>
-
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-5 mt-8">
-
-                  <Info
-                    label="Certificate ID"
-                    value={certificateId}
-                  />
-
-                  <Info
-                    label="Title"
-                    value={result.document?.title}
-                  />
-
-                  <Info
-                    label="Certificate Type"
-                    value={result.document?.certificateType}
-                  />
-
-                  <Info
-                    label="Issued By"
-                    value={result.document?.issuedBy}
-                  />
-
-                  <Info
-                    label="Issue Date"
-                    value={
-                      result.document?.issueDate
-                        ? new Date(
-                            result.document.issueDate
-                          ).toLocaleDateString()
-                        : "-"
-                    }
-                  />
-
-                  <Info
-                    label="Verification Status"
-                    value={result.document?.verificationStatus}
-                  />
-
-                  <div className="md:col-span-2">
-
-                    <Info
-                      label="Blockchain Transaction ID"
-                      value={result.document?.blockchainTxId}
-                    />
-
-                  </div>
-
-                  <div className="md:col-span-2">
-
-                    <Info
-                      label="Certificate Hash"
-                      value={result.document?.fileHash}
-                    />
-
-                  </div>
-
-                </div>
-
-              </>
-
-            ) : (
-
-              <div className="text-center py-10">
-
-                <ShieldX
-                  size={70}
-                  className="mx-auto text-red-500"
-                />
-
-                <h2 className="text-3xl font-bold text-red-400 mt-6">
-                  Certificate Not Verified
-                </h2>
-
-                <p className="text-slate-400 mt-4 max-w-xl mx-auto">
-                  {result.message ||
-                    "The uploaded certificate could not be verified."}
-                </p>
-
-              </div>
-
-            )}
+            <p className="text-sm text-slate-400 mt-1">
+              The certificate hash matches the record stored
+              on the Hyperledger Fabric blockchain.
+            </p>
 
           </div>
 
-        )}
+        </div>
 
       </div>
 
     </main>
-  );
-}
-
-function Info({
-  label,
-  value,
-}: {
-  label: string;
-  value: any;
-}) {
-  return (
-    <div className="bg-slate-900 rounded-xl p-5 border border-slate-800">
-
-      <p className="text-slate-400 text-sm">
-        {label}
-      </p>
-
-      <p className="text-white mt-2 break-all">
-        {value || "-"}
-      </p>
-
-    </div>
   );
 }

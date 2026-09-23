@@ -36,7 +36,7 @@ model Document {
   fileName String
   fileHash String @unique
 
-  certificateId   String?
+  certificateId   String? @unique
   verificationUrl String?
 
   issuedBy  String

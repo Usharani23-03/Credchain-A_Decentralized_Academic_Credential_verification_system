@@ -143,10 +143,6 @@ exports.uploadDocument = async (req, res) => {
             req.file.path;
 
 
-        // --------------------------------------------------------
-        // 2. Validate PDF
-        // --------------------------------------------------------
-
         if (
             req.file.mimetype !== "application/pdf"
         ) {

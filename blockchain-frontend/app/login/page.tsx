@@ -25,7 +25,14 @@ export default function LoginPage() {
         email,
         password,
       });
-      console.log(data);
+
+      console.log(
+        "LOGIN SUCCESS RESPONSE:",
+        JSON.stringify(data, null, 2)
+      );
+
+      alert(JSON.stringify(data));
+
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 

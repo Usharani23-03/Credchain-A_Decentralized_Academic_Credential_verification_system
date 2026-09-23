@@ -6,6 +6,8 @@ import { verifyCertificate } from "../../services/verify";
 
 interface VerificationResult {
   verified: boolean;
+  blockchainVerified?: boolean;
+
   document?: {
     title: string;
     certificateType: string;
@@ -15,6 +17,7 @@ interface VerificationResult {
     blockchainTxId: string;
     fileHash: string;
   };
+
   message?: string;
 }
 
@@ -47,6 +50,7 @@ export default function VerifyPage() {
 
       setResult({
         verified: false,
+        blockchainVerified: false,
         message:
           error?.response?.data?.message ||
           "Verification failed.",
@@ -58,6 +62,11 @@ export default function VerifyPage() {
 
     }
   };
+
+  // Detect tampering message returned by backend
+  const isTampered =
+    !result?.verified &&
+    result?.message?.toLowerCase().includes("modified");
 
   return (
     <main className="min-h-screen bg-[#020617] text-white p-10">
@@ -106,6 +115,7 @@ export default function VerifyPage() {
           onChange={(e) => {
             if (e.target.files?.length) {
               setFile(e.target.files[0]);
+              setResult(null);
             }
           }}
         />
@@ -127,7 +137,6 @@ export default function VerifyPage() {
           {result.verified ? (
 
             <>
-
               <div className="flex items-center gap-3 text-green-400">
 
                 <ShieldCheck size={35} />
@@ -186,7 +195,6 @@ export default function VerifyPage() {
                 </div>
 
               </div>
-
             </>
 
           ) : (
@@ -198,13 +206,61 @@ export default function VerifyPage() {
                 className="mx-auto text-red-500"
               />
 
-              <h2 className="text-3xl font-bold text-red-400 mt-6">
-                Certificate Not Verified
-              </h2>
+              {isTampered ? (
 
-              <p className="text-slate-400 mt-4">
-                {result.message}
-              </p>
+                <>
+                  <h2 className="text-3xl font-bold text-red-400 mt-6">
+                    Certificate Tampered
+                  </h2>
+
+                  <p className="text-slate-400 mt-4">
+                    The certificate was found, but the uploaded
+                    file has been modified.
+                  </p>
+
+                  <div className="grid md:grid-cols-2 gap-4 mt-8 text-left">
+
+                    <div className="bg-slate-900 rounded-xl p-5">
+                      <p className="text-slate-400 text-sm">
+                        SHA-512 Integrity
+                      </p>
+
+                      <p className="text-red-400 font-semibold mt-2">
+                        Failed
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-900 rounded-xl p-5">
+                      <p className="text-slate-400 text-sm">
+                        Certificate Status
+                      </p>
+
+                      <p className="text-red-400 font-semibold mt-2">
+                        Modified
+                      </p>
+                    </div>
+
+                  </div>
+
+                  <p className="text-slate-500 text-sm mt-6">
+                    The uploaded certificate does not match the
+                    original certificate stored in CredChain.
+                  </p>
+                </>
+
+              ) : (
+
+                <>
+                  <h2 className="text-3xl font-bold text-red-400 mt-6">
+                    Certificate Not Verified
+                  </h2>
+
+                  <p className="text-slate-400 mt-4">
+                    {result.message}
+                  </p>
+                </>
+
+              )}
 
             </div>
 
