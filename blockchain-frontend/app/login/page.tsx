@@ -26,16 +26,11 @@ export default function LoginPage() {
         password,
       });
 
-      console.log(
-        "LOGIN SUCCESS RESPONSE:",
-        JSON.stringify(data, null, 2)
-      );
-
-      alert(JSON.stringify(data));
-
+      // Store authentication details
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
+      // Redirect based on user role
       const role = data.user.role;
 
       switch (role) {
@@ -59,7 +54,9 @@ export default function LoginPage() {
           router.push("/");
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || "Login failed");
+      setError(
+        err.response?.data?.message || "Login failed. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -76,13 +73,16 @@ export default function LoginPage() {
         </h1>
 
         {error && (
-          <p className="text-red-400 mb-4">{error}</p>
+          <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-3 mb-4">
+            {error}
+          </div>
         )}
 
         <input
           type="email"
           placeholder="Email"
-          className="w-full p-3 mb-4 rounded-lg bg-slate-800 text-white"
+          required
+          className="w-full p-3 mb-4 rounded-lg bg-slate-800 text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-cyan-500"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -90,7 +90,8 @@ export default function LoginPage() {
         <input
           type="password"
           placeholder="Password"
-          className="w-full p-3 mb-6 rounded-lg bg-slate-800 text-white"
+          required
+          className="w-full p-3 mb-6 rounded-lg bg-slate-800 text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-cyan-500"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
@@ -98,7 +99,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-cyan-500 hover:bg-cyan-600 text-white py-3 rounded-lg"
+          className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
         >
           {loading ? "Logging in..." : "Login"}
         </button>

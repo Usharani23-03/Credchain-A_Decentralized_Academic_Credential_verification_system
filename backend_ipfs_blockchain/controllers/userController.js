@@ -94,6 +94,7 @@ exports.registerUser = async (req, res) => {
 
 };
 
+
 // ================= LOGIN =================
 
 exports.loginUser = async (req, res) => {
@@ -130,7 +131,10 @@ exports.loginUser = async (req, res) => {
 
         console.log("Stored password hash:", user.password);
 
-        const validPassword = await bcrypt.compare(password, user.password);
+        const validPassword = await bcrypt.compare(
+            password,
+            user.password
+        );
 
         console.log("PASSWORD MATCH:", validPassword);
 
@@ -172,6 +176,7 @@ exports.loginUser = async (req, res) => {
 
 };
 
+
 // ================= PROFILE =================
 
 exports.getProfile = async (req, res) => {
@@ -205,6 +210,127 @@ exports.getProfile = async (req, res) => {
     } catch (error) {
 
         console.error(error);
+
+        return res.status(500).json({
+            message: "Internal Server Error."
+        });
+
+    }
+
+};
+
+
+// ================= CHANGE PASSWORD =================
+
+exports.changePassword = async (req, res) => {
+
+    try {
+
+        const {
+            currentPassword,
+            newPassword
+        } = req.body;
+
+        // --------------------------------------------------
+        // Validate input
+        // --------------------------------------------------
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                message:
+                    "Current password and new password are required."
+            });
+        }
+
+        // --------------------------------------------------
+        // Validate new password length
+        // --------------------------------------------------
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                message:
+                    "New password must be at least 6 characters long."
+            });
+        }
+
+        // --------------------------------------------------
+        // Prevent same password
+        // --------------------------------------------------
+
+        if (currentPassword === newPassword) {
+            return res.status(400).json({
+                message:
+                    "New password must be different from the current password."
+            });
+        }
+
+        // --------------------------------------------------
+        // Get logged-in user
+        // --------------------------------------------------
+
+        const user = await prisma.user.findUnique({
+            where: {
+                id: req.user.id
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found."
+            });
+        }
+
+        // --------------------------------------------------
+        // Verify current password
+        // --------------------------------------------------
+
+        const validPassword = await bcrypt.compare(
+            currentPassword,
+            user.password
+        );
+
+        if (!validPassword) {
+            return res.status(401).json({
+                message: "Current password is incorrect."
+            });
+        }
+
+        // --------------------------------------------------
+        // Hash new password
+        // --------------------------------------------------
+
+        const hashedPassword = await bcrypt.hash(
+            newPassword,
+            10
+        );
+
+        // --------------------------------------------------
+        // Update password
+        // --------------------------------------------------
+
+        await prisma.user.update({
+            where: {
+                id: req.user.id
+            },
+            data: {
+                password: hashedPassword
+            }
+        });
+
+        // --------------------------------------------------
+        // Success
+        // --------------------------------------------------
+
+        return res.status(200).json({
+            message: "Password changed successfully."
+        });
+
+    } catch (error) {
+
+        console.error(
+            "CHANGE PASSWORD ERROR:",
+            error
+        );
 
         return res.status(500).json({
             message: "Internal Server Error."

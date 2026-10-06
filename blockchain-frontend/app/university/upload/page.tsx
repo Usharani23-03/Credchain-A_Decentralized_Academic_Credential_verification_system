@@ -63,12 +63,16 @@ export default function UploadPage() {
     }
 
 
-    if (file.type !== "application/pdf") {
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/jpg",];
 
+    if (!allowedTypes.includes(file.type)) {
       alert(
-        "Please upload a PDF certificate."
+        "Please upload a PDF, JPG, JPEG, or PNG certificate."
       );
-
       return;
     }
 
@@ -249,7 +253,7 @@ export default function UploadPage() {
             </h2>
 
             <p className="text-slate-400 mt-2">
-              Upload a PDF certificate
+              Upload a PDF, JPG, JPEG, or PNG certificate
             </p>
 
             {file && (
@@ -275,38 +279,30 @@ export default function UploadPage() {
             id="certificate"
             type="file"
             hidden
-            accept=".pdf,application/pdf"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
             onChange={(e) => {
-
-              const selectedFile =
-                e.target.files?.[0];
-
+              const selectedFile = e.target.files?.[0];
 
               if (!selectedFile) {
                 return;
               }
 
+              const allowedTypes = [
+                "application/pdf",
+                "image/jpeg",
+                "image/png",
+              ];
 
-              if (
-                selectedFile.type !==
-                "application/pdf"
-              ) {
-
+              if (!allowedTypes.includes(selectedFile.type)) {
                 alert(
-                  "Please select a PDF certificate."
+                  "Please select a PDF, JPG, JPEG, or PNG certificate."
                 );
-
                 e.target.value = "";
-
                 return;
-
               }
 
-
-              setFile(
-                selectedFile
-              );
-
+              setFile(selectedFile);
+              setResult(null);
             }}
           />
 

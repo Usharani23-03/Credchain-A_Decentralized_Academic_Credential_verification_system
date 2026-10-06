@@ -9,13 +9,17 @@ if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Store uploaded files in uploads folder
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, uploadsDir);
     },
 
     filename: (req, file, cb) => {
-        const safeName = file.originalname.replace(/[<>:"/\\|?*]/g, "_");
+        const safeName = file.originalname.replace(
+            /[<>:"/\\|?*]/g,
+            "_"
+        );
 
         cb(
             null,
@@ -24,16 +28,35 @@ const storage = multer.diskStorage({
     }
 });
 
+// Allow PDF, JPG, JPEG and PNG
 const fileFilter = (req, file, cb) => {
+    const allowedMimeTypes = [
+        "application/pdf",
+        "image/jpeg",
+        "image/png"
+    ];
 
-    const allowedExtensions = /\.pdf$/i;
+    const allowedExtensions = [
+        ".pdf",
+        ".jpg",
+        ".jpeg",
+        ".png"
+    ];
 
-    const isPDF = allowedExtensions.test(file.originalname);
+    const extension = path.extname(file.originalname).toLowerCase();
 
-    if (isPDF) {
+    const isAllowed =
+        allowedMimeTypes.includes(file.mimetype) &&
+        allowedExtensions.includes(extension);
+
+    if (isAllowed) {
         cb(null, true);
     } else {
-        cb(new Error("Only PDF files are allowed."));
+        cb(
+            new Error(
+                "Only PDF, JPG, JPEG, and PNG files are allowed."
+            )
+        );
     }
 };
 

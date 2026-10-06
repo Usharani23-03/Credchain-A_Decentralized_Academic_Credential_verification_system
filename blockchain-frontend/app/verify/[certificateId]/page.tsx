@@ -52,9 +52,16 @@ export default function CertificateVerificationPage() {
 
       try {
         setLoading(true);
-
-        const response = await api.get(
-          `/certificates/${encodeURIComponent(certificateId)}/verify`
+        console.log("🚀 Starting QR verification:", certificateId);
+        console.log(
+          "🌐 API URL:",
+          `http://localhost:5555/verify/qr`
+        );
+        const response = await api.post(
+          "/verify/qr",
+          {
+            certificateId,
+          }
         );
 
         console.log("Certificate verification response:", response.data);

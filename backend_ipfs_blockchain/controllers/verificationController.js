@@ -471,7 +471,7 @@ exports.verifyByQR =
                 message:
                     "Certificate authenticated successfully.",
 
-                document
+                certificate: document
 
             });
 

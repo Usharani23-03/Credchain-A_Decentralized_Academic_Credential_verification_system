@@ -5,7 +5,8 @@ const router = express.Router();
 const {
     registerUser,
     loginUser,
-    getProfile
+    getProfile,
+    changePassword
 } = require("../controllers/userController");
 
 const authenticateUser =
@@ -40,6 +41,17 @@ router.get(
     "/profile",
     authenticateUser,
     getProfile
+);
+
+
+// ============================================================
+// Change Password
+// ============================================================
+
+router.put(
+    "/change-password",
+    authenticateUser,
+    changePassword
 );
 
 

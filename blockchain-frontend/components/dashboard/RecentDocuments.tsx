@@ -33,26 +33,41 @@ export default function RecentDocuments({
   };
 
   const handleDownload = async (id: number) => {
-    try {
-      const response = await downloadDocument(id);
+  try {
+    const response = await downloadDocument(id);
 
-      const blob = new Blob([response.data]);
-      const url = window.URL.createObjectURL(blob);
+    const blob = response.data;
 
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `certificate-${id}.pdf`;
+    // Get the actual file type returned by the backend
+    const contentType =
+      response.headers["content-type"] || blob.type;
 
-      document.body.appendChild(link);
-      link.click();
+    let extension = "pdf";
 
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error(error);
-      alert("Download failed.");
+    if (contentType.includes("jpeg")) {
+      extension = "jpg";
+    } else if (contentType.includes("png")) {
+      extension = "png";
+    } else if (contentType.includes("pdf")) {
+      extension = "pdf";
     }
-  };
+
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `certificate-${id}.${extension}`;
+
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error(error);
+    alert("Download failed.");
+  }
+};
 
   const handleDelete = async (id: number) => {
     const confirmed = window.confirm(

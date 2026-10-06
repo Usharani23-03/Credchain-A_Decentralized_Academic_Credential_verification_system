@@ -99,6 +99,10 @@ export default function VerifyPage() {
             Click here to browse
           </p>
 
+          <p className="text-slate-500 text-sm mt-2">
+            Supported formats: PDF, JPG, JPEG, PNG
+          </p>
+
           {file && (
             <p className="mt-6 text-cyan-400">
               {file.name}
@@ -111,12 +115,27 @@ export default function VerifyPage() {
           id="certificate"
           hidden
           type="file"
-          accept=".pdf"
+          accept=".pdf,.jpg,.jpeg,.png"
           onChange={(e) => {
-            if (e.target.files?.length) {
-              setFile(e.target.files[0]);
-              setResult(null);
+            const selectedFile = e.target.files?.[0];
+
+            if (!selectedFile) return;
+
+            const allowedTypes = [
+              "application/pdf",
+              "image/jpeg",
+              "image/png",
+              "image/jpg",
+            ];
+
+            if (!allowedTypes.includes(selectedFile.type)) {
+              alert("Only PDF, JPG, JPEG, and PNG files are allowed.");
+              e.target.value = "";
+              return;
             }
+
+            setFile(selectedFile);
+            setResult(null);
           }}
         />
 
