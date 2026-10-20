@@ -55,7 +55,7 @@ export default function CertificateVerificationPage() {
         console.log("🚀 Starting QR verification:", certificateId);
         console.log(
           "🌐 API URL:",
-          `http://localhost:5555/verify/qr`
+          `${process.env.NEXT_PUBLIC_API_URL}/verify/qr`
         );
         const response = await api.post(
           "/verify/qr",

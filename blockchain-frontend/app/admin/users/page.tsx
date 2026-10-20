@@ -25,7 +25,7 @@ export default function AdminUsersPage() {
       const token = localStorage.getItem("token");
 
       const response = await axios.get(
-        "http://localhost:5555/admin/users",
+        "`${process.env.NEXT_PUBLIC_API_URL}/admin/users`",
         {
           headers: {
             Authorization: `Bearer ${token}`,
