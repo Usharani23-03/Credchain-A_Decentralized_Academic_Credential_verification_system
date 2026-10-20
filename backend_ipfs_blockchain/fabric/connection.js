@@ -1,3 +1,4 @@
+
 const {
     connect,
     signers,
@@ -9,32 +10,61 @@ const crypto = require("crypto");
 const grpc = require("@grpc/grpc-js");
 
 const connectToFabric = async () => {
+    let grpcClient;
+
     try {
         const cryptoPath =
+            process.env.FABRIC_CRYPTO_PATH ||
             "\\\\wsl$\\Ubuntu\\home\\usharani\\fabric-samples\\test-network\\organizations\\peerOrganizations\\org1.example.com";
+
+        const peerEndpoint =
+            process.env.FABRIC_PEER_ENDPOINT || "127.0.0.1:7051";
+
+        const peerHostAlias =
+            process.env.FABRIC_PEER_HOST_ALIAS || "peer0.org1.example.com";
 
         const certPath = path.join(
             cryptoPath,
-            "users/Admin@org1.example.com/msp/signcerts/Admin@org1.example.com-cert.pem"
+            "users",
+            "Admin@org1.example.com",
+            "msp",
+            "signcerts",
+            "Admin@org1.example.com-cert.pem"
         );
 
-        const keyPath = path.join(
+        const keyDirectory = path.join(
             cryptoPath,
-            "users/Admin@org1.example.com/msp/keystore/priv_sk"
+            "users",
+            "Admin@org1.example.com",
+            "msp",
+            "keystore"
         );
 
         const tlsCertPath = path.join(
             cryptoPath,
-            "peers/peer0.org1.example.com/tls/ca.crt"
+            "peers",
+            "peer0.org1.example.com",
+            "tls",
+            "ca.crt"
         );
 
         if (!fs.existsSync(certPath)) {
             throw new Error(`Fabric certificate not found: ${certPath}`);
         }
 
-        if (!fs.existsSync(keyPath)) {
-            throw new Error(`Fabric private key not found: ${keyPath}`);
+        if (!fs.existsSync(keyDirectory)) {
+            throw new Error(`Fabric keystore directory not found: ${keyDirectory}`);
         }
+
+        const keyFileName = fs.readdirSync(keyDirectory).find(
+            (name) => name.endsWith("_sk") || name.endsWith(".pem")
+        );
+
+        if (!keyFileName) {
+            throw new Error(`No private key found in: ${keyDirectory}`);
+        }
+
+        const keyPath = path.join(keyDirectory, keyFileName);
 
         if (!fs.existsSync(tlsCertPath)) {
             throw new Error(`Fabric TLS certificate not found: ${tlsCertPath}`);
@@ -44,15 +74,14 @@ const connectToFabric = async () => {
         const privateKey = fs.readFileSync(keyPath, "utf8");
         const tlsCert = fs.readFileSync(tlsCertPath);
 
-        console.log("Fabric certificate loaded");
-        console.log("Fabric private key loaded");
+        const grpcCredentials = grpc.credentials.createSsl(tlsCert);
 
-        const grpcClient = new grpc.Client(
-            "127.0.0.1:7051",
-            grpc.credentials.createSsl(tlsCert),
+        grpcClient = new grpc.Client(
+            peerEndpoint,
+            grpcCredentials,
             {
-                "grpc.ssl_target_name_override": "peer0.org1.example.com",
-                "grpc.default_authority": "peer0.org1.example.com",
+                "grpc.ssl_target_name_override": peerHostAlias,
+                "grpc.default_authority": peerHostAlias,
             }
         );
 
@@ -62,7 +91,6 @@ const connectToFabric = async () => {
         };
 
         const privateKeyObject = crypto.createPrivateKey(privateKey);
-
         const signer = signers.newPrivateKeySigner(privateKeyObject);
 
         const gateway = connect({
@@ -71,21 +99,19 @@ const connectToFabric = async () => {
             signer,
         });
 
-        console.log("Fabric Gateway Connected");
-
         const network = gateway.getNetwork("mychannel");
-
-        console.log("Fabric network loaded");
-
         const contract = network.getContract("certificate");
 
-        console.log("Fabric contract loaded");
+        console.log("Fabric Gateway configured");
+        console.log(`Fabric peer endpoint: ${peerEndpoint}`);
 
         return contract;
-
     } catch (error) {
-        console.error("FABRIC CONNECTION ERROR");
-        console.error(error);
+        if (grpcClient) {
+            grpcClient.close();
+        }
+
+        console.error("FABRIC CONNECTION ERROR:", error.message);
         throw error;
     }
 };
