@@ -1,154 +1,119 @@
-const grpc = require("@grpc/grpc-js");
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
 
 const {
     connect,
-    signers
+    signers,
 } = require("@hyperledger/fabric-gateway");
 
-const channelName = "mychannel";
-const chaincodeName = "certificate";
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const grpc = require("@grpc/grpc-js");
 
-async function connectFabric() {
-
-    const cryptoPath =
-        "\\\\wsl$\\Ubuntu\\home\\keerthana\\fabric-samples\\test-network\\organizations\\peerOrganizations\\org1.example.com";
+const connectToFabric = async () => {
+    let grpcClient;
 
     try {
+        const cryptoPath =
+            process.env.FABRIC_CRYPTO_PATH ||
+            "\\\\wsl$\\Ubuntu\\home\\usharani\\fabric-samples\\test-network\\organizations\\peerOrganizations\\org1.example.com";
 
-        // ============================================================
-        // ADMIN CERTIFICATE
-        // ============================================================
+        const peerEndpoint =
+            process.env.FABRIC_PEER_ENDPOINT || "127.0.0.1:7051";
+
+        const peerHostAlias =
+            process.env.FABRIC_PEER_HOST_ALIAS || "peer0.org1.example.com";
 
         const certPath = path.join(
             cryptoPath,
-            "users/Admin@org1.example.com/msp/signcerts"
+            "users",
+            "Admin@org1.example.com",
+            "msp",
+            "signcerts",
+            "Admin@org1.example.com-cert.pem"
         );
 
-        const certFiles = fs.readdirSync(certPath);
+        const keyDirectory = path.join(
+            cryptoPath,
+            "users",
+            "Admin@org1.example.com",
+            "msp",
+            "keystore"
+        );
 
-        if (certFiles.length === 0) {
-            throw new Error(
-                "No Admin certificate found in: " + certPath
-            );
+        const tlsCertPath = path.join(
+            cryptoPath,
+            "peers",
+            "peer0.org1.example.com",
+            "tls",
+            "ca.crt"
+        );
+
+        if (!fs.existsSync(certPath)) {
+            throw new Error(`Fabric certificate not found: ${certPath}`);
         }
 
-        const credentials = fs.readFileSync(
-            path.join(certPath, certFiles[0])
-        );
-
-        console.log("Certificate loaded");
-
-
-        // ============================================================
-        // ADMIN PRIVATE KEY
-        // ============================================================
-
-        const keyPath = path.join(
-            cryptoPath,
-            "users/Admin@org1.example.com/msp/keystore"
-        );
-
-        const keyFiles = fs.readdirSync(keyPath);
-
-        if (keyFiles.length === 0) {
-            throw new Error(
-                "No private key found in: " + keyPath
-            );
+        if (!fs.existsSync(keyDirectory)) {
+            throw new Error(`Fabric keystore directory not found: ${keyDirectory}`);
         }
 
-        const privateKeyPem = fs.readFileSync(
-            path.join(keyPath, keyFiles[0]),
-            "utf8"
+        const keyFileName = fs.readdirSync(keyDirectory).find(
+            (name) => name.endsWith("_sk") || name.endsWith(".pem")
         );
 
-        const privateKey = crypto.createPrivateKey({
-            key: privateKeyPem,
-            format: "pem"
-        });
+        if (!keyFileName) {
+            throw new Error(`No private key found in: ${keyDirectory}`);
+        }
 
-        console.log("Private key loaded");
+        const keyPath = path.join(keyDirectory, keyFileName);
 
+        if (!fs.existsSync(tlsCertPath)) {
+            throw new Error(`Fabric TLS certificate not found: ${tlsCertPath}`);
+        }
 
-        // ============================================================
-        // ORG1 PEER TLS CA
-        // ============================================================
+        const certificate = fs.readFileSync(certPath, "utf8");
+        const privateKey = fs.readFileSync(keyPath, "utf8");
+        const tlsCert = fs.readFileSync(tlsCertPath);
 
-        const tlsCaPath = path.join(
-            cryptoPath,
-            "peers/peer0.org1.example.com/tls/ca.crt"
+        const grpcCredentials = grpc.credentials.createSsl(tlsCert);
+
+        grpcClient = new grpc.Client(
+            peerEndpoint,
+            grpcCredentials,
+            {
+                "grpc.ssl_target_name_override": peerHostAlias,
+                "grpc.default_authority": peerHostAlias,
+            }
         );
 
-        const tlsCaCertificate =
-            fs.readFileSync(tlsCaPath);
+        const identity = {
+            mspId: "Org1MSP",
+            credentials: Buffer.from(certificate),
+        };
 
-        console.log("TLS CA certificate loaded");
-
-
-        // ============================================================
-        // GRPC CLIENT
-        // ============================================================
-
-        const client = new grpc.Client(
-            "localhost:7051",
-            grpc.credentials.createSsl(
-                tlsCaCertificate
-            )
-        );
-
-        console.log("gRPC client created");
-
-
-        // ============================================================
-        // FABRIC GATEWAY
-        // ============================================================
+        const privateKeyObject = crypto.createPrivateKey(privateKey);
+        const signer = signers.newPrivateKeySigner(privateKeyObject);
 
         const gateway = connect({
-            client,
-
-            identity: {
-                mspId: "Org1MSP",
-                credentials
-            },
-
-            signer: signers.newPrivateKeySigner(
-                privateKey
-            )
+            client: grpcClient,
+            identity,
+            signer,
         });
 
-        console.log("Fabric Gateway connected");
+        const network = gateway.getNetwork("mychannel");
+        const contract = network.getContract("certificate");
 
-
-        // ============================================================
-        // NETWORK
-        // ============================================================
-
-        const network =
-            gateway.getNetwork(channelName);
-
-        const contract =
-            network.getContract(chaincodeName);
-
-        console.log(
-            `Fabric contract loaded: ${chaincodeName}`
-        );
-
+        console.log("Fabric Gateway configured");
+        console.log(`Fabric peer endpoint: ${peerEndpoint}`);
 
         return contract;
-
     } catch (error) {
+        if (grpcClient) {
+            grpcClient.close();
+        }
 
-        console.error("");
-        console.error("=================================");
-        console.error("FABRIC CONNECTION ERROR");
-        console.error("=================================");
-        console.error(error.message);
-        console.error("=================================");
-
+        console.error("FABRIC CONNECTION ERROR:", error.message);
         throw error;
     }
-}
+};
 
-module.exports = connectFabric;
+module.exports = connectToFabric;
